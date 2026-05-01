@@ -26,7 +26,7 @@ jobs:
 
       - name: Initialize Capacitor
         run: |
-          npx cap init "SafePath Indore" "com.safepath.indore" --web-dir backend/static
+          npx cap init "Raksha" "com.raksha.app" --web-dir backend/static
           npx cap add android
 
       - name: Build APK
