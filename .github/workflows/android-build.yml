@@ -1,0 +1,42 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Dependencies
+        run: |
+          npm install -g @capacitor/cli
+          cd backend/static
+          npm init -y
+          npm install @capacitor/core @capacitor/android
+
+      - name: Initialize Capacitor
+        run: |
+          npx cap init "SafePath Indore" "com.safepath.indore" --web-dir backend/static
+          npx cap add android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: safepath-indore-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

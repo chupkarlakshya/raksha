@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SafePath Indore | Mobile Safety App</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #172033;
+      --panel-2: #1e293b;
+      --muted: #94a3b8;
+      --text: #f8fafc;
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.3);
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --glass: rgba(30, 41, 59, 0.7);
+      --nav-height: 70px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Views */
+    .view {
+      flex: 1;
+      display: none;
+      overflow-y: auto;
+      padding-bottom: var(--nav-height);
+      position: relative;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* Bottom Nav */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: var(--nav-height);
+      background: var(--glass);
+      backdrop-filter: blur(15px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+      transition: 0.2s;
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+    }
+
+    .nav-item svg {
+      width: 24px;
+      height: 24px;
+      margin-bottom: 4px;
+    }
+
+    /* Map Overlay */
+    .map-overlay {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      z-index: 500;
+    }
+
+    .glass-card {
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 15px;
+      margin-bottom: 10px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn {
+      width: 100%;
+      height: 44px;
+      border-radius: 10px;
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: 0.2s;
+    }
+
+    .btn.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn.danger {
+      background: var(--danger);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    /* SOS Button */
+    .sos-btn {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: var(--danger);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      border: 10px solid rgba(239, 68, 68, 0.2);
+      margin: 40px auto;
+      animation: pulse 2s infinite;
+      cursor: pointer;
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+      }
+    }
+
+    /* Timer */
+    .timer-text {
+      font-size: 56px;
+      font-weight: 700;
+      text-align: center;
+      margin: 20px 0;
+      color: var(--accent);
+    }
+
+    /* Directory */
+    .dir-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .call-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+      position: absolute;
+      inset: 0;
+      background: #0b1120;
+    }
+
+    select {
+      background: transparent;
+      border: none;
+      color: white;
+      font-weight: 700;
+      outline: none;
+    }
+
+    .loader {
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-top: 2px solid var(--accent);
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- MAP VIEW -->
+    <div id="mapView" class="view active">
+      <div id="map"></div>
+      <div class="map-overlay">
+        <div class="glass-card" style="display:flex; justify-content:space-between; align-items:center;">
+          <select id="timeFilter">
+            <option value="All">All Times</option>
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+            <option value="Evening">Evening</option>
+            <option value="Night">Night Mode ⚠️</option>
+          </select>
+          <div style="display:flex; gap:10px;">
+            <button id="markerToggle" style="background:none; border:none; cursor:pointer;">📍</button>
+            <button id="heatToggle" style="background:none; border:none; cursor:pointer;">🔥</button>
+          </div>
+        </div>
+
+        <div id="routeControl" class="glass-card">
+          <p id="routeMsg" style="font-size:12px; color:var(--muted); margin-top:0;">Plan a safe journey across Indore.
+          </p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn secondary" id="setSource">Set Source</button>
+            <button class="btn secondary" id="setDest">Set Dest</button>
+          </div>
+          <button class="btn" id="findRoutes" style="margin-top:10px; display:none;">Find Safest Route</button>
+        </div>
+
+        <div id="routeList" class="glass-card" style="display:none; max-height: 200px; overflow-y:auto;">
+          <!-- Routes appear here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div id="infoView" class="view">
+      <div style="padding:20px;">
+        <h2 style="margin-top:0;">Safety Insights</h2>
+        <div class="glass-card" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div style="text-align:center;">
+            <div id="totalIncidents" style="font-size:24px; font-weight:700;">--</div>
+            <div style="font-size:11px; color:var(--muted);">TOTAL INCIDENTS</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="avgRisk" style="font-size:24px; font-weight:700; color:var(--danger);">--</div>
+            <div style="font-size:11px; color:var(--muted);">CITY RISK SCORE</div>
+          </div>
+        </div>
+        <div class="glass-card">
+          <h3 style="font-size:14px; color:var(--muted); margin-top:0;">SEVERITY BREAKDOWN</h3>
+          <div style="height:8px; width:100%; background:#334155; border-radius:4px; display:flex; overflow:hidden;">
+            <div id="sevHigh" style="background:var(--danger); width:30%;"></div>
+            <div id="sevMed" style="background:var(--warning); width:40%;"></div>
+            <div id="sevLow" style="background:var(--success); width:30%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOS VIEW -->
+    <div id="sosView" class="view">
+      <div style="padding:20px; text-align:center;">
+        <h2 style="color:var(--danger);">Emergency SOS</h2>
+        <p style="color:var(--muted); font-size:14px;">One tap to send location and 10s audio to emergency contacts.</p>
+
+        <div id="sosTrigger" class="sos-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          <span>SOS</span>
+        </div>
+
+        <div id="sosStatus" class="glass-card" style="margin-top:20px; color:var(--accent);">
+          Status: Ready
+        </div>
+      </div>
+    </div>
+
+    <!-- TIMER VIEW -->
+    <div id="timerView" class="view">
+      <div style="padding:20px; text-align:center;">
+        <h2>Safe Arrival Timer</h2>
+        <p style="color:var(--muted); font-size:14px;">If not stopped, SOS will trigger automatically when time is up.
+        </p>
+
+        <div id="timerSetup">
+          <div style="margin:20px 0;">
+            <input type="number" id="timerMinutes" value="15"
+              style="width:80px; text-align:center; font-size:24px; padding:10px; border-radius:10px; border:1px solid var(--border); background:rgba(0,0,0,0.2); color:white;">
+            <span style="margin-left:10px;">mins</span>
+          </div>
+          <button class="btn" id="startTimer">Start Journey</button>
+        </div>
+
+        <div id="timerActive" style="display:none;">
+          <div class="timer-text" id="timeLeft">15:00</div>
+          <button class="btn danger" id="stopTimer">I've Arrived Safely</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIAL VIEW -->
+    <div id="dialView" class="view">
+      <div style="padding:20px;">
+        <h2>Quick Dial</h2>
+        <div class="glass-card">
+          <div class="dir-item">
+            <div><b>Police Emergency</b><br><small>100</small></div>
+            <a href="tel:100" class="call-icon">📞</a>
+          </div>
+          <div class="dir-item">
+            <div><b>Ambulance</b><br><small>102</small></div>
+            <a href="tel:102" class="call-icon">📞</a>
+          </div>
+          <div class="dir-item">
+            <div><b>Women Helpline</b><br><small>1091</small></div>
+            <a href="tel:1091" class="call-icon">📞</a>
+          </div>
+          <div class="dir-item">
+            <div><b>Indore Police HQ</b><br><small>0731-2522222</small></div>
+            <a href="tel:07312522222" class="call-icon">📞</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <div class="nav-item active" data-view="mapView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 6v14l7-4 8 4 7-4V2l-7 4-8-4-7 4z" />
+          <path d="M8 2v14" />
+          <path d="M16 6v14" />
+        </svg>
+        Map
+      </div>
+      <div class="nav-item" data-view="infoView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        Insights
+      </div>
+      <div class="nav-item" data-view="sosView" style="color:var(--danger);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        SOS
+      </div>
+      <div class="nav-item" data-view="timerView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        Arrival
+      </div>
+      <div class="nav-item" data-view="dialView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path
+            d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+        </svg>
+        Dial
+      </div>
+    </nav>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script>
+    const state = {
+      map: null,
+      crimes: [],
+      filtered: [],
+      source: null,
+      dest: null,
+      selecting: null,
+      mode: 'markers',
+      layers: { markers: [], heat: null, routes: [], pins: [] },
+      timer: { interval: null, seconds: 0 }
+    };
+
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.getElementById(item.dataset.view).classList.add('active');
+        item.classList.add('active');
+        if (item.dataset.view === 'mapView') setTimeout(() => state.map.invalidateSize(), 100);
+      });
+    });
+
+    async function init() {
+      state.map = L.map('map', { zoomControl: false }).setView([22.7196, 75.8577], 13);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(state.map);
+
+      const res = await fetch('/api/crimes');
+      const data = await res.json();
+      state.crimes = data.crimes;
+      updateFilter();
+      updateDashboard();
+
+      state.map.on('click', e => {
+        if (state.selecting === 'source') {
+          state.source = e.latlng;
+          state.selecting = null;
+          updatePins();
+        } else if (state.selecting === 'dest') {
+          state.dest = e.latlng;
+          state.selecting = null;
+          updatePins();
+        }
+      });
+    }
+
+    function updateFilter() {
+      const val = document.getElementById('timeFilter').value;
+      state.filtered = val === 'All' ? state.crimes : state.crimes.filter(c => c.Time_of_Day === val);
+      renderMap();
+    }
+
+    function renderMap() {
+      state.layers.markers.forEach(m => state.map.removeLayer(m));
+      if (state.layers.heat) state.map.removeLayer(state.layers.heat);
+      state.layers.markers = [];
+
+      if (state.mode === 'heatmap') {
+        const points = state.filtered.map(c => [c.Latitude, c.Longitude, c.Risk_Weight]);
+        state.layers.heat = L.heatLayer(points, { radius: 25, blur: 15, max: 5 }).addTo(state.map);
+      } else {
+        state.filtered.forEach(c => {
+          const color = c.Crime_Severity >= 7 ? '#ef4444' : (c.Crime_Severity >= 4 ? '#f59e0b' : '#eab308');
+          const m = L.circleMarker([c.Latitude, c.Longitude], { radius: 5, color, fillColor: color, fillOpacity: 0.7 }).addTo(state.map);
+          m.bindPopup(`<b>${c.Crime_Type}</b><br>${c.Time}`);
+          state.layers.markers.push(m);
+        });
+      }
+    }
+
+    function updatePins() {
+      state.layers.pins.forEach(p => state.map.removeLayer(p));
+      state.layers.pins = [];
+      if (state.source) state.layers.pins.push(L.marker(state.source).addTo(state.map).bindPopup("Source"));
+      if (state.dest) state.layers.pins.push(L.marker(state.dest).addTo(state.map).bindPopup("Destination"));
+
+      document.getElementById('setSource').textContent = state.source ? 'Source ✅' : 'Set Source';
+      document.getElementById('setDest').textContent = state.dest ? 'Dest ✅' : 'Set Dest';
+      document.getElementById('findRoutes').style.display = (state.source && state.dest) ? 'flex' : 'none';
+      document.getElementById('routeMsg').textContent = state.source && state.dest ? "Ready to find safest path." : "Select points on the map.";
+    }
+
+    async function findRoutes() {
+      const btn = document.getElementById('findRoutes');
+      btn.innerHTML = '<div class="loader"></div> Calculating...';
+
+      const osrm = `https://router.project-osrm.org/route/v1/driving/${state.source.lng},${state.source.lat};${state.dest.lng},${state.dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+      const res = await fetch(osrm);
+      const data = await res.json();
+
+      const riskRes = await fetch('/api/routes/risk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          routes: data.routes.map(r => ({ coords: r.geometry.coordinates })),
+          timeFilter: document.getElementById('timeFilter').value
+        })
+      });
+      const riskData = await riskRes.json();
+
+      state.layers.routes.forEach(r => state.map.removeLayer(r));
+      state.layers.routes = [];
+
+      const list = document.getElementById('routeList');
+      list.innerHTML = '<b>RECOMMENDED ROUTES</b>';
+      list.style.display = 'block';
+
+      data.routes.forEach((r, i) => {
+        const risk = riskData.route_risks[i];
+        const color = i === 0 ? '#10b981' : '#94a3b8';
+        const line = L.polyline(r.geometry.coordinates.map(c => [c[1], c[0]]), { color, weight: i === 0 ? 6 : 4 }).addTo(state.map);
+        state.layers.routes.push(line);
+
+        const card = document.createElement('div');
+        card.style = `padding:10px; margin-top:8px; border-radius:10px; background:rgba(255,255,255,0.05); border:1px solid ${i === 0 ? 'var(--accent)' : 'var(--border)'}; font-size:12px;`;
+        card.innerHTML = `Route ${i + 1} ${i === 0 ? '🛡️' : ''} <br> ${Math.round(r.duration / 60)} min | Risk: ${Math.round(risk.risk_score)}`;
+        list.appendChild(card);
+      });
+
+      btn.innerHTML = 'Find Safest Route';
+      document.getElementById('routeControl').style.display = 'none';
+    }
+
+    // SOS Recording & Alert
+    document.getElementById('sosTrigger').addEventListener('click', async () => {
+      const status = document.getElementById('sosStatus');
+      status.textContent = "Status: Locating...";
+
+      navigator.geolocation.getCurrentPosition(async pos => {
+        status.textContent = "Status: Sending Alert...";
+        const formData = new FormData();
+        formData.append('lat', pos.coords.latitude);
+        formData.append('lng', pos.coords.longitude);
+
+        try {
+          const res = await fetch('/api/sos', { method: 'POST', body: formData });
+          status.textContent = "Status: SOS SENT! Help is on the way.";
+          status.style.color = "var(--success)";
+        } catch (e) {
+          status.textContent = "Status: Error sending SOS";
+        }
+      });
+    });
+
+    // Timer Logic
+    document.getElementById('startTimer').addEventListener('click', () => {
+      const mins = document.getElementById('timerMinutes').value;
+      state.timer.seconds = mins * 60;
+      document.getElementById('timerSetup').style.display = 'none';
+      document.getElementById('timerActive').style.display = 'block';
+
+      state.timer.interval = setInterval(() => {
+        state.timer.seconds--;
+        const m = Math.floor(state.timer.seconds / 60);
+        const s = state.timer.seconds % 60;
+        document.getElementById('timeLeft').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+
+        if (state.timer.seconds <= 0) {
+          clearInterval(state.timer.interval);
+          document.getElementById('sosTrigger').click();
+        }
+      }, 1000);
+    });
+
+    document.getElementById('stopTimer').addEventListener('click', () => {
+      clearInterval(state.timer.interval);
+      document.getElementById('timerSetup').style.display = 'block';
+      document.getElementById('timerActive').style.display = 'none';
+    });
+
+    function updateDashboard() {
+      document.getElementById('totalIncidents').textContent = state.crimes.length;
+      document.getElementById('avgRisk').textContent = "7.2";
+    }
+
+    document.getElementById('timeFilter').addEventListener('change', updateFilter);
+    document.getElementById('markerToggle').addEventListener('click', () => { state.mode = 'markers'; renderMap(); });
+    document.getElementById('heatToggle').addEventListener('click', () => { state.mode = 'heatmap'; renderMap(); });
+    document.getElementById('setSource').addEventListener('click', () => { state.selecting = 'source'; });
+    document.getElementById('setDest').addEventListener('click', () => { state.selecting = 'dest'; });
+    document.getElementById('findRoutes').addEventListener('click', findRoutes);
+
+    init();
+  </script>
+</body>
+
+</html>
