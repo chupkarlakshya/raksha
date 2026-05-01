@@ -17,20 +17,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Dependencies
+      - name: Install Capacitor & Dependencies
         run: |
-          npm install -g @capacitor/cli
-          cd backend/static
           npm init -y
-          npm install @capacitor/core @capacitor/android
+          npm install @capacitor/cli @capacitor/core @capacitor/android
 
       - name: Initialize Capacitor
         run: |
-          npx cap init "Raksha" "com.raksha.app" --web-dir backend/static
+          npx cap init "Raksha" "com.raksha.app" --web-dir safepath_indore/backend/static
           npx cap add android
 
-      - name: Build APK
+      - name: Sync & Build
         run: |
+          npx cap sync
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
