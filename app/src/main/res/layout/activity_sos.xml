@@ -1,98 +1,137 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/sos_red_dark"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="32dp">
+    android:background="@drawable/sos_full_bg">
 
+    <!-- Header -->
     <TextView
+        android:id="@+id/sosStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="🚨"
-        android:textSize="80sp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
         android:text="SOS ACTIVATED"
-        android:textColor="@android:color/white"
-        android:textSize="28sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text="Live location is being shared with your trusted contacts and the SafePath response team."
-        android:textColor="#FFE0E0"
-        android:textSize="15sp" />
-
-    <TextView
-        android:id="@+id/sosLocation"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:gravity="center"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:fontFamily="monospace" />
+        android:textColor="@color/white"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.05"
+        android:layout_marginTop="80dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView
         android:id="@+id/sosTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
+        android:text="Alerting Trusted Contacts..."
+        android:textColor="#FFC2D1"
+        android:textSize="14sp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/sosStatus"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <LinearLayout
+    <!-- Center Icon -->
+    <FrameLayout
+        android:id="@+id/sosIconContainer"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        app:layout_constraintTop_toBottomOf="@id/sosTimer"
+        app:layout_constraintBottom_toTopOf="@id/buttonGrid"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+        
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/sos_pulse_ring"
+            android:alpha="0.3" />
+
+        <ImageView
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_shield_alert"
+            app:tint="@color/white" />
+    </FrameLayout>
+
+    <!-- Location Pill -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/locationCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="32dp"
+        app:cardCornerRadius="20dp"
+        app:cardBackgroundColor="#26000000"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toTopOf="@id/buttonGrid"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+        <TextView
+            android:id="@+id/sosLocation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="10dp"
+            android:text="📍 Indore Junction"
+            android:textColor="@color/white"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Emergency Actions -->
+    <GridLayout
+        android:id="@+id/buttonGrid"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:gravity="center"
-        android:orientation="horizontal">
+        android:layout_marginBottom="40dp"
+        android:paddingHorizontal="32dp"
+        android:columnCount="2"
+        app:layout_constraintBottom_toTopOf="@id/cancelSosButton">
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/callPoliceButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_height="100dp"
+            android:layout_columnWeight="1"
             android:layout_marginEnd="8dp"
-            android:background="@drawable/bg_status_chip"
-            android:text="Call Police (100)"
-            android:textColor="@android:color/white"
-            android:textAllCaps="false"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:text="Call Police"
+            android:textColor="@color/white"
+            android:backgroundTint="#33FFFFFF"
+            app:cornerRadius="24dp"
+            app:icon="@drawable/ic_phone"
+            app:iconGravity="top"
+            app:iconPadding="12dp"
+            style="@style/Widget.Material3.Button.TonalButton" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/callAmbulanceButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_height="100dp"
+            android:layout_columnWeight="1"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_status_chip"
-            android:text="Ambulance (108)"
-            android:textColor="@android:color/white"
-            android:textAllCaps="false"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+            android:text="Ambulance"
+            android:textColor="@color/white"
+            android:backgroundTint="#33FFFFFF"
+            app:cornerRadius="24dp"
+            app:icon="@drawable/ic_ambulance"
+            app:iconGravity="top"
+            app:iconPadding="12dp"
+            style="@style/Widget.Material3.Button.TonalButton" />
+    </GridLayout>
 
-    <androidx.appcompat.widget.AppCompatButton
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/cancelSosButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
-        android:background="@android:color/white"
-        android:paddingHorizontal="24dp"
-        android:stateListAnimator="@null"
-        android:text="Cancel"
-        android:textColor="@color/sos_red_dark"
-        android:textStyle="bold" />
+        android:layout_marginBottom="40dp"
+        android:text="Deactivate Shield"
+        android:textColor="@color/accent"
+        android:backgroundTint="@color/white"
+        app:cornerRadius="20dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -59,4 +59,110 @@ object Geocoder {
             null
         }
     }
+    
+    fun getPossibleMatches(context: Context, query: String): List<Pair<String, LatLng>> {
+        val key = query.trim().lowercase()
+        if (key.isEmpty()) return emptyList()
+
+        val results = mutableListOf<Pair<String, LatLng>>()
+
+        // 1. Landmarks matches
+        landmarks.forEach { (name, pos) ->
+            if (name.contains(key) || key.contains(name)) {
+                results.add(name.replaceFirstChar { it.uppercase() } to pos)
+            }
+        }
+
+        // 2. System matches
+        try {
+            val geocoder = AndroidGeocoder(context, Locale.getDefault())
+            val addresses = geocoder.getFromLocationName("$query, Indore, Madhya Pradesh", 5)
+            addresses?.forEach { addr ->
+                val name = addr.thoroughfare ?: addr.featureName ?: addr.subLocality ?: query
+                val latLng = LatLng(addr.latitude, addr.longitude)
+                // Avoid duplicates
+                if (results.none { GeoUtils.distanceMeters(it.second, latLng) < 100 }) {
+                    results.add(name to latLng)
+                }
+            }
+        } catch (e: Exception) {}
+
+        return results
+    }
+
+    /**
+     * Translates coordinates back to a readable location label.
+     */
+    fun reverseGeocode(context: Context, location: LatLng): String? {
+        // Simple heuristic for landmarks
+        for ((name, pos) in landmarks) {
+            if (GeoUtils.distanceMeters(location, pos) < 300) {
+                return name.replaceFirstChar { it.uppercase() }
+            }
+        }
+
+        return try {
+            val geocoder = AndroidGeocoder(context, Locale.getDefault())
+            val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val addr = addresses[0]
+                addr.thoroughfare ?: addr.featureName ?: addr.subLocality ?: "Indore Central"
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private val client = okhttp3.OkHttpClient()
+    private const val MAPS_KEY = "AIzaSyA03tc8_xkPHr9r9ow4K2xlMbHrzl3R5w8"
+
+    fun getGoogleSuggestions(query: String, callback: (List<Pair<String, String>>) -> Unit) {
+        val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "https://maps.googleapis.com/maps/api/place/autocomplete/json" +
+                "?input=$encodedQuery" +
+                "&location=22.7196,75.8577&radius=10000" +
+                "&key=$MAPS_KEY"
+
+        val request = okhttp3.Request.Builder().url(url).build()
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                callback(emptyList())
+            }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val body = response.body?.string() ?: ""
+                val results = mutableListOf<Pair<String, String>>()
+                try {
+                    val json = org.json.JSONObject(body)
+                    val predictions = json.getJSONArray("predictions")
+                    for (i in 0 until predictions.length()) {
+                        val p = predictions.getJSONObject(i)
+                        results.add(p.getString("description") to p.getString("place_id"))
+                    }
+                } catch (e: Exception) {}
+                callback(results)
+            }
+        })
+    }
+
+    fun getPlaceDetails(placeId: String, callback: (LatLng?) -> Unit) {
+        val url = "https://maps.googleapis.com/maps/api/place/details/json" +
+                "?place_id=$placeId&fields=geometry&key=$MAPS_KEY"
+
+        val request = okhttp3.Request.Builder().url(url).build()
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                callback(null)
+            }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val body = response.body?.string() ?: ""
+                try {
+                    val json = org.json.JSONObject(body)
+                    val loc = json.getJSONObject("result").getJSONObject("geometry").getJSONObject("location")
+                    callback(LatLng(loc.getDouble("lat"), loc.getDouble("lng")))
+                } catch (e: Exception) {
+                    callback(null)
+                }
+            }
+        })
+    }
 }

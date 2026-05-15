@@ -1,63 +1,202 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="32dp">
+    android:background="#F8FAFC">
 
-    <View
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:background="@drawable/circle_green" />
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:scrollbars="none"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="@string/tracking_active"
-        android:textColor="@color/status_green"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="56dp"
+            android:paddingBottom="32dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:gravity="center"
-        android:text="Your live location is being shared with your trusted contacts every 30 seconds."
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp" />
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="28dp">
+                <ImageButton
+                    android:id="@+id/btnBack"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_icon_soft_slate"
+                    android:src="@drawable/ic_back"
+                    android:padding="8dp"
+                    app:tint="@color/ink" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SAFETY FEATURE"
+                        android:textColor="@color/slate500"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Live Tracking"
+                        android:textColor="@color/ink"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
 
-    <TextView
-        android:id="@+id/liveLocation"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:fontFamily="monospace"
-        android:textColor="@color/text_primary"
-        android:textSize="14sp" />
+            <!-- Status Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                app:cardBackgroundColor="@color/card_glass"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
 
-    <TextView
-        android:id="@+id/liveTimer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="@color/text_secondary"
-        android:textSize="12sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Current Location"
+                        android:textColor="@color/slate500"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
 
-    <androidx.appcompat.widget.AppCompatButton
-        android:id="@+id/stopTrackingButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="48dp"
-        android:background="@drawable/bg_navigate_button"
-        android:paddingHorizontal="32dp"
-        android:stateListAnimator="@null"
-        android:text="Stop Tracking"
-        android:textAllCaps="false"
-        android:textColor="@color/white"
-        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/tvCurrentCoords"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📍 Fetching location..."
+                        android:textColor="@color/ink"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
 
-</LinearLayout>
+                    <TextView
+                        android:id="@+id/tvSharingStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tap below to share your live location with contacts"
+                        android:textColor="@color/slate500"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Share URL Card (hidden until sharing starts) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/shareUrlCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="#F0FFF4"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="1.5dp"
+                app:strokeColor="@color/emerald">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔗 Share this tracking link"
+                        android:textColor="@color/emerald"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+                    <TextView
+                        android:id="@+id/tvShareUrl"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/ink"
+                        android:textSize="13sp"
+                        android:textIsSelectable="true" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Progress -->
+            <ProgressBar
+                android:id="@+id/progressSharing"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
+            <!-- Share Location Button -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnShareLocation"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_dark_action_button"
+                android:text="📡 Share My Location"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <!-- Copy Link -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnCopyLink"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_feature_button"
+                android:text="📋 Copy Link"
+                android:textAllCaps="false"
+                android:textColor="@color/ink"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <!-- WhatsApp Share -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnWhatsapp"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_feature_button"
+                android:text="💬 Share via WhatsApp / SMS"
+                android:textAllCaps="false"
+                android:textColor="#16A34A"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Info Text -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="Your location is updated every 5 seconds. Your emergency contact is automatically notified when you start sharing."
+                android:textColor="@color/slate500"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:layout_gravity="center" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -15,8 +15,14 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import parse_qs, urlparse
+try:
+    from twilio.rest import Client
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+    print("Warning: 'twilio' module not found. SMS notifications will be logged to console only.")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -50,7 +56,7 @@ def _load_env():
 
 _load_env()
 
-PORT = int(os.environ.get("PORT", "8787"))
+PORT = int(os.environ.get("PORT", "8080"))
 TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM = os.environ.get("TWILIO_FROM_NUMBER", "")
@@ -64,32 +70,34 @@ RISK_MODEL_PATH = os.path.join(
 
 # ----------------------------------------------------------------- twilio ---
 
-def send_sms(to_number, message):
-    """Send an SMS through Twilio. No-op when DEMO_MODE is on."""
+def send_sms(to_number, message_body):
+    """Sends an SMS via Twilio or logs to console if Twilio is unavailable."""
     if DEMO_MODE:
-        print(f"[DEMO_MODE] would SMS {to_number}: {message}")
+        print(f"[DEMO_MODE] To {to_number}: {message_body}")
         return True
-    if not (TWILIO_SID and TWILIO_TOKEN and TWILIO_FROM and to_number):
-        print("[twilio] missing config or recipient — skipping send")
-        return False
-    if not TWILIO_SID.startswith("AC"):
-        print("[twilio] SID looks invalid — skipping send")
+
+    if not TWILIO_AVAILABLE:
+        print(f"\n[MOCK SMS] To: {to_number}")
+        print(f"[MOCK SMS] Body: {message_body}\n")
+        return True
+
+    if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM]):
+        print("\n[MOCK SMS (Missing Keys)] To: " + to_number)
+        print("[MOCK SMS (Missing Keys)] Body: " + message_body + "\n")
         return False
 
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
-    payload = urllib.parse.urlencode(
-        {"To": to_number, "From": TWILIO_FROM, "Body": message}
-    ).encode("utf-8")
-    auth = base64.b64encode(f"{TWILIO_SID}:{TWILIO_TOKEN}".encode("utf-8")).decode("ascii")
-
-    req = urllib.request.Request(url, data=payload, method="POST")
-    req.add_header("Authorization", f"Basic {auth}")
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
-        with urllib.request.urlopen(req, timeout=8) as f:
-            return f.status == 201
+        print(f"[SMS AUDIT] Sending to {to_number}...")
+        client = Client(TWILIO_SID, TWILIO_TOKEN)
+        client.messages.create(
+            body=message_body,
+            from_=TWILIO_FROM,
+            to=to_number
+        )
+        print(f"[SMS AUDIT] Success: Sent to {to_number}")
+        return True
     except Exception as e:
-        print(f"[twilio] error: {e}")
+        print(f"[SMS AUDIT] FAILED: {to_number} -> {e}")
         return False
 
 
@@ -133,6 +141,28 @@ CREATE TABLE IF NOT EXISTS risk_zones (
     risk_score REAL,
     source TEXT,
     updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS hazard_zones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    radius_meters INTEGER NOT NULL DEFAULT 200,
+    risk_boost REAL NOT NULL DEFAULT 1000.0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    creator TEXT DEFAULT 'admin',
+    note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tracking_sessions (
+    session_id TEXT PRIMARY KEY,
+    emergency_contact TEXT,
+    latest_lat REAL,
+    latest_lng REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    active INTEGER DEFAULT 1
 );
 """
 
@@ -179,7 +209,7 @@ def _seed_db(conn):
                 int(item.get("severity", 3)),
                 item.get("status", "pending"),
                 item.get("reportedBy", "demo"),
-                item.get("createdAt", datetime.now(timezone.utc).isoformat() + "Z"),
+                item.get("createdAt", datetime.now(timezone.utc).isoformat()),
                 item.get("reviewedAt"),
             ),
         )
@@ -194,7 +224,7 @@ def _seed_db(conn):
                 float(item.get("latitude", item.get("lat", 0))),
                 float(item.get("longitude", item.get("lng", 0))),
                 item.get("status", "active"),
-                item.get("createdAt", datetime.now(timezone.utc).isoformat() + "Z"),
+                item.get("createdAt", datetime.now(timezone.utc).isoformat()),
                 item.get("resolvedAt"),
             ),
         )
@@ -257,6 +287,18 @@ def _row_to_zone(row):
     }
 
 
+def _row_to_hazard_zone(row):
+    return {
+        "id": row["id"],
+        "lat": row["latitude"],
+        "lng": row["longitude"],
+        "radius_m": row["radius_meters"],
+        "risk": row["risk_boost"],
+        "expires_at": row["expires_at"],
+        "note": row["note"]
+    }
+
+
 def get_overview(conn):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM incidents")
@@ -291,12 +333,17 @@ def get_risk_model():
         return _risk_model
     _risk_model_load_attempted = True
     if not os.path.exists(RISK_MODEL_PATH):
-        print(f"[risk-model] not found at {RISK_MODEL_PATH} — /api/risk will return 503")
+        print(f"[risk-model] not found at {RISK_MODEL_PATH} — predictions disabled")
         return None
     try:
-        import joblib  # local import; backend works without it if model missing
+        # Check if dependencies are available
+        import joblib
+        import numpy
         _risk_model = joblib.load(RISK_MODEL_PATH)
-        print(f"[risk-model] loaded from {RISK_MODEL_PATH}")
+        print(f"[risk-model] loaded successfully from {RISK_MODEL_PATH}")
+    except ImportError:
+        print("[risk-model] joblib or numpy not installed — ML features disabled")
+        _risk_model = None
     except Exception as e:
         print(f"[risk-model] load failed: {e}")
         _risk_model = None
@@ -343,6 +390,7 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
@@ -362,21 +410,19 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
             return False
         try:
             decoded = base64.b64decode(header.split(" ", 1)[1]).decode("utf-8")
-        except Exception:
+            user, pw = decoded.split(":", 1)
+            is_valid = (user == ADMIN_USER and pw == ADMIN_PASS)
+            if not is_valid:
+                print(f"[AUTH] Denied login for user: {user}")
+            return is_valid
+        except Exception as e:
+            print(f"CRITICAL SERVER ERROR: {e}")
             return False
-        if ":" not in decoded:
-            return False
-        user, _, pw = decoded.partition(":")
-        return user == ADMIN_USER and pw == ADMIN_PASS
 
     def require_admin(self):
         if self.is_admin():
             return True
-        self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Basic realm="SafePath Admin"')
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"error":"unauthorized"}')
+        self.send_json(401, {"error": "unauthorized"})
         return False
 
     def handle_one_request(self):
@@ -396,6 +442,13 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(204)
         self.end_headers()
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
@@ -407,6 +460,13 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             self.handle_api_post(parsed.path)
+        else:
+            self.send_error(404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            self.handle_api_delete(parsed.path)
         else:
             self.send_error(404)
 
@@ -435,22 +495,34 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/":
             path = "/index.html"
-        file_path = os.path.normpath(os.path.join(PUBLIC_DIR, path.lstrip("/")))
-        # Prevent path traversal.
-        if not file_path.startswith(PUBLIC_DIR):
-            self.send_error(403)
+        
+        # Security: Normalize and ensure path is within PUBLIC_DIR
+        relative_path = path.lstrip("/")
+        file_path = os.path.normpath(os.path.join(PUBLIC_DIR, relative_path))
+        
+        if not file_path.startswith(os.path.normpath(PUBLIC_DIR)):
+            self.send_error(403, "Access denied")
             return
+            
         if not os.path.isfile(file_path):
+            # Fallback for SPA routing if needed, but here just 404
             self.send_error(404, "File not found")
             return
 
-        content_type = "application/octet-stream"
-        if path.endswith(".html"):
-            content_type = "text/html"
-        elif path.endswith(".css"):
-            content_type = "text/css"
-        elif path.endswith(".js"):
-            content_type = "application/javascript"
+        # Improved Mime-type mapping
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_types = {
+            ".html": "text/html; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".js": "application/javascript; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon"
+        }
+        content_type = mime_types.get(ext, "application/octet-stream")
 
         with open(file_path, "rb") as f:
             data = f.read()
@@ -571,10 +643,123 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json(200, {
                     "hour": hour, "day": day, "steps": steps, "cells": grid,
                 })
+
+            elif path == "/api/hazard-zones":
+                # only return active zones
+                now_utc = datetime.now(timezone.utc).isoformat()
+                rows = conn.execute(
+                    "SELECT * FROM hazard_zones WHERE expires_at > ? ORDER BY expires_at ASC",
+                    (now_utc,)
+                ).fetchall()
+                self.send_json(200, [_row_to_hazard_zone(r) for r in rows])
+
+            elif path == "/api/tracking/location":
+                sid = query.get("session_id", [None])[0]
+                if not sid:
+                    self.send_json(400, {"error": "session_id required"})
+                    return
+                row = conn.execute(
+                    "SELECT latest_lat, latest_lng FROM tracking_sessions WHERE session_id=? AND active=1",
+                    (sid,)
+                ).fetchone()
+                if not row:
+                    self.send_json(404, {"error": "session not found"})
+                    return
+                self.send_json(200, {"lat": row["latest_lat"], "lng": row["latest_lng"]})
+
             else:
-                self.send_error(404)
+                # Check if it's a tracking page request: /track/<session_id>
+                parts = parsed.path.strip("/").split("/")
+                if parts[0] == "track" and len(parts) == 2:
+                    self.handle_tracking_page(parts[1], conn)
+                else:
+                    self.send_error(404)
         finally:
             conn.close()
+
+    # --- GET routes -------------------------------------------------------
+
+    def handle_tracking_page(self, session_id, conn):
+        """Serve a real-time browser tracking page for the given session."""
+        row = conn.execute(
+            "SELECT * FROM tracking_sessions WHERE session_id=? AND active=1",
+            (session_id,)
+        ).fetchone()
+
+        if not row:
+            self.send_response(404)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<h2>Tracking session not found or expired.</h2>")
+            return
+
+        lat = row["latest_lat"] or 22.7196
+        lng = row["latest_lng"] or 75.8577
+        base_url = f"http://{self.headers.get('Host', 'localhost:8080')}"
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafePath Live Tracking</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body {{ margin: 0; font-family: -apple-system, sans-serif; background: #0f172a; color: white; }}
+  #map {{ width: 100vw; height: 75vh; }}
+  #status {{ padding: 16px 20px; background: #1e293b; border-top: 1px solid #334155; }}
+  #status h2 {{ margin: 0 0 4px; font-size: 18px; }}
+  #status p {{ margin: 0; color: #94a3b8; font-size: 13px; }}
+  #coords {{ font-size: 13px; color: #38bdf8; margin-top: 6px; font-weight: bold; }}
+  .pulse-ring {{ border-radius: 50%; animation: pulse 2s infinite; }}
+  @keyframes pulse {{ 0%,100%{{ opacity:1; }} 50%{{ opacity:0.4; }} }}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="status">
+  <h2>🛡 SafePath Live Tracking</h2>
+  <p>This person is sharing their real-time location with you.</p>
+  <div id="coords">📍 {lat:.5f}, {lng:.5f}</div>
+</div>
+<script>
+var map = L.map('map').setView([{lat}, {lng}], 15);
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+    attribution: '© OpenStreetMap'
+}}).addTo(map);
+
+var marker = L.circleMarker([{lat}, {lng}], {{
+    radius: 12, color: '#ef4444', fillColor: '#ef4444',
+    fillOpacity: 0.9, weight: 3
+}}).addTo(map).bindPopup('Current Location').openPopup();
+
+var SESSION_ID = '{session_id}';
+var BASE = '{base_url}';
+
+function refresh() {{
+    fetch(BASE + '/api/tracking/location?session_id=' + SESSION_ID)
+        .then(r => r.json())
+        .then(data => {{
+            if (data.lat && data.lng) {{
+                var pos = [data.lat, data.lng];
+                marker.setLatLng(pos);
+                map.panTo(pos);
+                document.getElementById('coords').textContent = '📍 ' + data.lat.toFixed(5) + ', ' + data.lng.toFixed(5);
+            }}
+        }}).catch(e => console.log('Update failed', e));
+}}
+
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>"""
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # --- POST routes ------------------------------------------------------
 
@@ -582,7 +767,50 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
         body = self.read_json_body()
         conn = db_connect()
         try:
-            if path == "/api/incidents":
+            if path == "/api/tracking/start":
+                try:
+                    lat = float(body.get("lat", 22.7196))
+                    lng = float(body.get("lng", 75.8577))
+                except (TypeError, ValueError):
+                    lat, lng = 22.7196, 75.8577
+                contact = str(body.get("emergency_contact", ""))
+                sid = uuid.uuid4().hex
+                expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+                conn.execute(
+                    "INSERT INTO tracking_sessions (session_id, emergency_contact, latest_lat, latest_lng, expires_at) VALUES (?,?,?,?,?)",
+                    (sid, contact, lat, lng, expires.isoformat())
+                )
+                conn.commit()
+                host = self.headers.get("Host", f"localhost:{PORT}")
+                share_url = f"http://{host}/track/{sid}"
+                # Send SMS to emergency contact
+                if contact:
+                    msg = f"SafePath LIVE TRACKING: Someone is sharing their live location with you. Track them here: {share_url}"
+                    send_sms(contact, msg)
+                self.send_json(201, {"session_id": sid, "share_url": share_url})
+
+            elif path == "/api/tracking/update":
+                sid = body.get("session_id", "")
+                try:
+                    lat = float(body.get("lat"))
+                    lng = float(body.get("lng"))
+                except (TypeError, ValueError):
+                    self.send_json(400, {"error": "lat and lng required"})
+                    return
+                conn.execute(
+                    "UPDATE tracking_sessions SET latest_lat=?, latest_lng=? WHERE session_id=? AND active=1",
+                    (lat, lng, sid)
+                )
+                conn.commit()
+                self.send_json(200, {"ok": True})
+
+            elif path == "/api/tracking/stop":
+                sid = body.get("session_id", "")
+                conn.execute("UPDATE tracking_sessions SET active=0 WHERE session_id=?", (sid,))
+                conn.commit()
+                self.send_json(200, {"ok": True, "stopped": True})
+
+            elif path == "/api/incidents":
                 try:
                     lat = float(body.get("latitude", body.get("lat")))
                     lng = float(body.get("longitude", body.get("lng")))
@@ -602,7 +830,7 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
                         min(5, max(1, int(body.get("severity", 3)))),
                         body.get("status", "pending"),
                         body.get("reportedBy", "anonymous"),
-                        datetime.now(timezone.utc).isoformat() + "Z",
+                        datetime.now(timezone.utc).isoformat(),
                     ),
                 )
                 conn.commit()
@@ -628,7 +856,7 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
                         lat,
                         lng,
                         "active",
-                        datetime.now(timezone.utc).isoformat() + "Z",
+                        datetime.now(timezone.utc).isoformat(),
                     ),
                 )
                 conn.commit()
@@ -651,14 +879,37 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
                 payload["demoMode"] = DEMO_MODE
                 self.send_json(201, payload)
 
-            elif path == "/api/notify":
-                # Manual notify, admin only.
+            elif path == "/api/dispatch":
+                if not self.require_admin(): return
+                to = body.get("to", "")
+                msg = body.get("message", "Emergency Alert")
+                ok = send_sms(to, msg)
+                self.send_json(200, {"success": ok, "demoMode": DEMO_MODE})
+
+            elif path == "/api/hazard-zones":
                 if not self.require_admin():
                     return
-                to = body.get("to", "")
-                msg = body.get("message", "")
-                ok = send_sms(to, msg)
-                self.send_json(200 if ok else 500, {"success": ok, "demoMode": DEMO_MODE})
+                lat = body.get("lat")
+                lng = body.get("lng")
+                radius = body.get("radius_m", 200)
+                duration = body.get("duration_minutes", 30)
+                note = body.get("note", "")
+                risk_boost = body.get("risk_boost", 1000.0)
+                
+                if lat is None or lng is None:
+                    self.send_json(400, {"error": "lat and lng required"})
+                    return
+
+                expires = datetime.now(timezone.utc) + timedelta(minutes=int(duration))
+                cursor = conn.execute(
+                    "INSERT INTO hazard_zones (latitude, longitude, radius_meters, risk_boost, expires_at, note) VALUES (?,?,?,?,?,?)",
+                    (lat, lng, radius, risk_boost, expires.isoformat(), note)
+                )
+                conn.commit()
+                new_id = cursor.lastrowid
+                row = conn.execute("SELECT * FROM hazard_zones WHERE id=?", (new_id,)).fetchone()
+                self.send_json(201, _row_to_hazard_zone(row))
+
             else:
                 self.send_error(404)
         finally:
@@ -717,8 +968,58 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    def handle_api_delete(self, path):
+        if not self.require_admin():
+            return
+        parts = path.strip("/").split("/")  # api/hazard-zones/ID
+        if len(parts) < 3:
+            self.send_error(404)
+            return
+        resource, resource_id = parts[1], parts[2]
+        conn = db_connect()
+        try:
+            if resource == "hazard-zones":
+                conn.execute("DELETE FROM hazard_zones WHERE id=?", (resource_id,))
+                conn.commit()
+                self.send_json(200, {"status": "deleted"})
+            else:
+                self.send_error(404)
+        finally:
+            conn.close()
+
 
 # ----------------------------------------------------------------- entry ---
+
+    def handle_api_patch(self, path):
+        if not self.require_admin():
+            return
+        body = self.read_json_body()
+        conn = db_connect()
+        try:
+            if path.startswith("/api/sos/"):
+                sos_id = path.replace("/api/sos/", "")
+                status = body.get("status", "resolved")
+                conn.execute(
+                    "UPDATE sos_events SET status = ?, resolved_at = ? WHERE id = ?",
+                    (status, datetime.now(timezone.utc).isoformat(), sos_id)
+                )
+                conn.commit()
+                self.send_json(200, {"success": True, "id": sos_id, "status": status})
+            elif path.startswith("/api/incidents/"):
+                inc_id = path.replace("/api/incidents/", "")
+                status = body.get("status", "verified")
+                conn.execute(
+                    "UPDATE incidents SET status = ?, reviewed_at = ? WHERE id = ?",
+                    (status, datetime.now(timezone.utc).isoformat(), inc_id)
+                )
+                conn.commit()
+                self.send_json(200, {"success": True, "id": inc_id, "status": status})
+            else:
+                self.send_error(404, "Endpoint not found")
+        except Exception as e:
+            self.send_error(500, str(e))
+        finally:
+            conn.close()
 
 if __name__ == "__main__":
     init_db()

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAKSHA - Tactical Response</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/response_v3.css">
+</head>
+<body class="light-theme">
+  
+  <nav class="top-nav">
+    <div class="logo">
+        <span class="brand">RAKSHA</span>
+        <span class="view-title">Active Response Center</span>
+    </div>
+    <div class="nav-meta">
+        <div class="status-pill live">
+            <span class="dot"></span> LIVE OPS
+        </div>
+        <a href="/index.html" class="exit-link">Exit to Dash</a>
+    </div>
+  </nav>
+
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h3>Responder Network</h3>
+        <button id="broadcast-all" class="btn-broadcast">📢 Broadcast All</button>
+      </div>
+      <div id="responder-list" class="responder-list">
+          <!-- Populated by JS -->
+      </div>
+    </aside>
+
+    <main class="content-area">
+      <div id="no-sos" class="empty-state">
+        <div class="shield-icon">🛡️</div>
+        <h2>All Clear</h2>
+        <p>Monitoring regional sensors. No active SOS signals detected.</p>
+      </div>
+
+      <div id="sos-focus" class="sos-card" style="display: none;">
+        <div class="sos-map-container" id="map"></div>
+        <div class="sos-info-panel">
+            <div class="card-header">
+                <div class="badge emergency">CRITICAL ALERT</div>
+                <div class="badge user-id" id="display-user">USER: 0000</div>
+            </div>
+            
+            <h1 id="display-title">SOS Signal Triggered</h1>
+            <p class="coords" id="display-coords">📍 22.00000, 75.00000</p>
+
+            <div class="metric-row">
+                <div class="metric">
+                    <span class="m-label">REPORTED</span>
+                    <span class="m-value" id="display-time">--:--</span>
+                </div>
+                <div class="metric">
+                    <span class="m-label">NETWORK</span>
+                    <span class="m-value">SafePath Indore</span>
+                </div>
+            </div>
+
+            <div class="card-actions">
+                <button class="btn btn-outline" onclick="alert('Lockdown protocol initiated.')">🔒 Lockdown</button>
+                <button class="btn btn-primary" id="resolve-btn">✓ Mark as Resolved</button>
+            </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/response_v3.js"></script>
+</body>
+</html>

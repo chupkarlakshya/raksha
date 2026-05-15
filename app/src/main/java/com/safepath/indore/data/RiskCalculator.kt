@@ -22,7 +22,7 @@ class RiskCalculator(private val crimes: List<CrimePoint>) {
     }
 
     /** Sum of time-weighted risk within [radiusMeters] of [location]. */
-    fun riskAt(location: LatLng, radius: Double = radiusMeters): Double {
+    private fun baseRiskAt(location: LatLng, radius: Double = radiusMeters): Double {
         var sum = 0.0
         // Bounding box pre-filter: ~radius / 111_000 in degrees.
         val degLat = radius / 111_000.0
@@ -48,16 +48,32 @@ class RiskCalculator(private val crimes: List<CrimePoint>) {
         return sum
     }
 
-    fun isHighRisk(location: LatLng): Boolean = riskAt(location) >= highRiskThreshold
+    fun riskAt(lat: Double, lng: Double, radius: Double, hazards: List<HazardZone> = emptyList()): Double {
+        var totalRisk = baseRiskAt(LatLng(lat, lng), radius)
+        for (hazard in hazards) {
+            val dist = GeoUtils.haversine(lat, lng, hazard.lat, hazard.lng)
+            if (dist <= hazard.radiusM) {
+                totalRisk = maxOf(totalRisk, hazard.risk)
+            }
+        }
+        return totalRisk
+    }
+
+    fun riskAt(location: LatLng, radius: Double = radiusMeters, hazards: List<HazardZone> = emptyList()): Double {
+        return riskAt(location.latitude, location.longitude, radius, hazards)
+    }
+
+    fun isHighRisk(location: LatLng, hazards: List<HazardZone> = emptyList()): Boolean = 
+        riskAt(location, hazards = hazards) >= highRiskThreshold
 
     /**
      * Total risk along a polyline by sampling at fixed intervals and
      * summing per-sample risk.
      */
-    fun routeRisk(points: List<LatLng>, sampleEveryMeters: Double = 100.0): Double {
+    fun routeRisk(points: List<LatLng>, hazards: List<HazardZone> = emptyList(), sampleEveryMeters: Double = 100.0): Double {
         val samples = GeoUtils.samplePolyline(points, sampleEveryMeters)
         var total = 0.0
-        for (p in samples) total += riskAt(p, radiusMeters)
+        for (p in samples) total += riskAt(p, radiusMeters, hazards)
         return total
     }
 

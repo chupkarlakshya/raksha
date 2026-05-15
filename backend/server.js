@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = Number(process.env.PORT || 8787);
+const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "safepath.json");
 const SEED_FILE = path.join(DATA_DIR, "seed.json");

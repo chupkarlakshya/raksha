@@ -48,11 +48,14 @@ class SosActivity : AppCompatActivity() {
         val lng = intent.getDoubleExtra(EXTRA_LNG, 75.8577)
         binding.sosLocation.text = "📍 %.5f, %.5f".format(lat, lng)
 
-        val prefs = getSharedPreferences("SafePath", MODE_PRIVATE)
+        val prefs = getSharedPreferences("safepath_prefs", MODE_PRIVATE)
         val contact = prefs.getString("emergency_contact", "")
         if (!contact.isNullOrEmpty()) {
             binding.sosTimer.text = "Alerting $contact... · Help is on the way"
         }
+
+        // Notify Watch
+        com.safepath.indore.utils.WearConnectionManager.sendSosToWatch(this)
 
         binding.cancelSosButton.setOnClickListener { finish() }
         

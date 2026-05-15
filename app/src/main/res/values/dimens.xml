@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">20dp</dimen>
+    <dimen name="spacing_xxl">24dp</dimen>
+
+    <!-- Radius -->
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <!-- Icon sizes -->
+    <dimen name="icon_sm">20dp</dimen>
+    <dimen name="icon_md">24dp</dimen>
+    <dimen name="icon_lg">32dp</dimen>
+
+    <!-- Button heights -->
+    <dimen name="button_height_sm">40dp</dimen>
+    <dimen name="button_height_md">48dp</dimen>
+    <dimen name="button_height_lg">56dp</dimen>
+
+    <!-- Text sizes -->
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_body_small">13sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_title_small">16sp</dimen>
+    <dimen name="text_title">18sp</dimen>
+    <dimen name="text_headline">24sp</dimen>
+    <dimen name="text_display">28sp</dimen>
+</resources>

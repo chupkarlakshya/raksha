@@ -1,97 +1,207 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SafePath Command Center</title>
-  <link rel="stylesheet" href="/styles.css">
+  <title>Raksha Admin — Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <!-- Row 1: Top Bar -->
   <header class="topbar">
-    <div>
-      <p class="eyebrow">SafePath Indore</p>
-      <h1>Command Center</h1>
+    <div class="topbar-left">
+      <p class="eyebrow">Indore physical security</p>
+      <h1>Raksha Command Center</h1>
     </div>
-    <div style="display: flex; gap: 10px;">
-      <a href="/response.html" style="text-decoration: none;">
-        <button type="button" class="primary" style="background: #8b3a1a; border-color: #8b3a1a;">Active Response</button>
+    <div class="topbar-center">
+      <div class="clock" id="clock">00:00:00</div>
+    </div>
+    <div class="topbar-right">
+      <a href="/response_v3.html" style="text-decoration: none;">
+        <button class="btn btn-primary">⚡ Active Response</button>
       </a>
-      <button id="policeToggle" type="button" style="border-color: #276fc2; color: #276fc2;">Show Police Stations</button>
-      <button id="refreshButton" type="button">Refresh</button>
+      <button class="btn" id="refreshButton">🔄 Refresh</button>
     </div>
   </header>
 
-  <main>
-    <section class="metrics" aria-label="System overview">
-      <article>
-        <span>Total Incidents</span>
-        <strong id="totalIncidents">0</strong>
-      </article>
-      <article>
-        <span>Pending Reports</span>
-        <strong id="pendingReports">0</strong>
-      </article>
-      <article>
-        <span>Active SOS</span>
-        <strong id="activeSos">0</strong>
-      </article>
-      <article>
-        <span>High-Risk Zones</span>
-        <strong id="highRiskZones">0</strong>
-      </article>
-    </section>
+  <!-- Row 2: Metrics Bar -->
+  <div class="metrics-bar">
+    <div class="metric-cell">
+      <span class="metric-label">Total Incidents</span>
+      <span class="metric-value" id="stat-total">0</span>
+    </div>
+    <div class="metric-cell">
+      <span class="metric-label">Pending Reports</span>
+      <span class="metric-value" id="stat-pending">0</span>
+    </div>
+    <div class="metric-cell">
+      <span class="metric-label">Active SOS</span>
+      <span class="metric-value danger" id="stat-sos">0</span>
+    </div>
+    <div class="metric-cell">
+      <span class="metric-label">High-Risk Zones</span>
+      <span class="metric-value warn" id="stat-hazards">0</span>
+    </div>
+    <div class="metric-cell live-indicator">
+      <span class="live-dot"></span>
+      <span class="live-text">SYSTEM LIVE</span>
+    </div>
+  </div>
 
-    <section class="workspace">
-      <div class="mapPanel">
-        <div class="panelHeader">
-          <h2>Incident Map</h2>
+  <!-- Row 3: Content Area -->
+  <main class="content-area">
+    <!-- Left Column (Flexible) -->
+    <div class="left-col">
+      <!-- Top Half: Map Panel -->
+      <section class="panel map-panel">
+        <div class="panel-header">
+          <h2>Live Incident Map</h2>
           <div class="legend">
-            <span><i class="dot pending"></i>Pending</span>
-            <span><i class="dot verified"></i>Verified</span>
-            <span><i class="dot sos"></i>SOS</span>
+            <span class="legend-item"><i class="dot" style="background: var(--warn);"></i> Pending</span>
+            <span class="legend-item"><i class="dot" style="background: var(--safe);"></i> Verified</span>
+            <span class="legend-item"><i class="dot" style="background: var(--accent);"></i> SOS</span>
+          </div>
+          <button class="btn btn-xs" id="policeToggle">🛰️ Toggle Stations</button>
+        </div>
+        <div id="mapCanvas"></div>
+      </section>
+
+      <!-- Bottom Half: Table Panel -->
+      <section class="panel table-panel">
+        <div class="panel-header">
+          <div class="header-group">
+            <h2>Incident Moderation</h2>
+            <span class="badge" id="pendingBadge">0 NEW</span>
+          </div>
+          <select id="statusFilter" class="btn">
+            <option value="">Filter: All</option>
+            <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="mainTable">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Sev</th>
+                <th>Status</th>
+                <th>Location</th>
+                <th>Description</th>
+                <th>Reported</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="incidentTable">
+              <!-- Populated by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column (Fixed 320px) -->
+    <aside class="right-col">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="sos">SOS</button>
+        <button class="tab-btn" data-tab="reports">Reports</button>
+        <button class="tab-btn" data-tab="hazards">Hazards</button>
+        <button class="tab-btn" data-tab="stations">Stations</button>
+      </div>
+      
+      <div class="tab-content">
+        <!-- SOS Tab Pane -->
+        <div class="tab-pane active" id="pane-sos">
+          <div id="sosList" class="stack">
+            <div class="empty-state">No active alerts</div>
           </div>
         </div>
-        <div id="mapCanvas" class="mapCanvas" role="img" aria-label="Indore incident map"></div>
-      </div>
 
-      <aside class="sidePanel">
-        <div class="panelHeader">
-          <h2>Active SOS</h2>
+        <!-- Reports Tab Pane -->
+        <div class="tab-pane" id="pane-reports">
+          <div id="pendingList" class="stack">
+            <div class="empty-state">No pending reports</div>
+          </div>
         </div>
-        <div id="sosList" class="stack"></div>
-      </aside>
-    </section>
 
-    <section class="tablePanel">
-      <div class="panelHeader">
-        <h2>Report Moderation</h2>
-        <select id="statusFilter" aria-label="Filter reports">
-          <option value="">All reports</option>
-          <option value="pending">Pending</option>
-          <option value="verified">Verified</option>
-          <option value="rejected">Rejected</option>
-        </select>
+        <!-- Hazards Tab Pane -->
+        <div class="tab-pane" id="pane-hazards">
+          <div class="hazard-controls">
+            <h3 class="sub-heading">Blacklist Area</h3>
+            <form id="hazardForm" class="stack">
+              <div class="form-row">
+                <input type="number" id="haz-lat" step="any" placeholder="Lat">
+                <input type="number" id="haz-lng" step="any" placeholder="Lng">
+              </div>
+              <select id="haz-radius">
+                <option value="100">Radius: 100m</option>
+                <option value="200" selected>Radius: 200m</option>
+                <option value="500">Radius: 500m</option>
+              </select>
+              <select id="haz-duration">
+                <option value="15">15 min</option>
+                <option value="30" selected>30 min</option>
+                <option value="60">1 hour</option>
+                <option value="1440">24 hours</option>
+              </select>
+              <input type="text" id="haz-note" placeholder="Reason (e.g. Assault)">
+              <p style="font-size: 10px; color: var(--text-muted); margin-top: 8px;">💡 Click on the main map to pick coordinates</p>
+              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">🚫 Blacklist Area</button>
+            </form>
+            <div class="active-zones-container" style="margin-top: 24px;">
+              <h3 class="sub-heading">Active Zones</h3>
+              <div id="activeZonesList" class="stack"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stations Tab Pane -->
+        <div class="tab-pane" id="pane-stations">
+          <div id="stationsList" class="stack">
+            <div class="station-card">
+              <strong>Vijay Nagar Police Station</strong>
+              <p>📍 AB Road, Vijay Nagar</p>
+            </div>
+            <div class="station-card">
+              <strong>Bhawarkua Police Station</strong>
+              <p>📍 Bhawarkua Main Rd</p>
+            </div>
+            <div class="station-card">
+              <strong>MIG Colony Station</strong>
+              <p>📍 MIG Colony</p>
+            </div>
+            <!-- More can be added -->
+          </div>
+        </div>
       </div>
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Severity</th>
-              <th>Status</th>
-              <th>Location</th>
-              <th>Description</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="incidentTable"></tbody>
-        </table>
-      </div>
-    </section>
+    </aside>
   </main>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="/app.js"></script>
+  <script>
+    // Tab Logic
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const paneId = 'pane-' + btn.getAttribute('data-tab');
+        document.getElementById(paneId).classList.add('active');
+      });
+    });
+
+    // Clock Logic
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('en-GB');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
 </body>
 </html>

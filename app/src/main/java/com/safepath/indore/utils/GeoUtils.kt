@@ -22,6 +22,11 @@ object GeoUtils {
         return EARTH_RADIUS_M * c
     }
 
+    /** Alias for distanceMeters using raw coordinates. */
+    fun haversine(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        return distanceMeters(LatLng(lat1, lng1), LatLng(lat2, lng2))
+    }
+
     /** Total length of a polyline in metres. */
     fun polylineLengthMeters(points: List<LatLng>): Double {
         var sum = 0.0

@@ -1,0 +1,340 @@
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:clipToPadding="false"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textColor="@color/ink"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp"/>
+
+        <!-- Emergency Contact Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Emergency Contact"
+            android:textColor="@color/slate500"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="#F8FAFC"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#1A000000">
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                
+                <EditText
+                    android:id="@+id/editEmergencyContact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="+91 98765 43210"
+                    android:inputType="phone"
+                    android:background="@null"
+                    android:textColor="@color/ink"
+                    android:textSize="16sp"/>
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="This number will receive your location during SOS alerts."
+                    android:textColor="@color/slate400"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Preferences Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Preferences"
+            android:textColor="@color/slate500"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="32dp"
+            app:cardBackgroundColor="#F8FAFC"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#1A000000">
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Stick to Main Roads"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp"/>
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchMainRoads"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"/>
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#0D000000"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Enable Voice Coach"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp"/>
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchVoice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Smartwatch Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Smartwatch Management"
+            android:textColor="@color/slate500"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="#F1F5F9"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#1A000000">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_watch"
+                        app:tint="@color/slate500"
+                        android:layout_marginEnd="12dp"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        
+                        <TextView
+                            android:id="@+id/tvWatchStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Checking connection..."
+                            android:textColor="@color/ink"
+                            android:textSize="16sp"
+                            android:textStyle="bold"/>
+                        
+                        <TextView
+                            android:id="@+id/tvWatchDetail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ensure Wear OS app is installed"
+                            android:textColor="@color/slate400"
+                            android:textSize="12sp"/>
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnPingWatch"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Ping"
+                        android:textColor="@color/accent"
+                        android:padding="0dp"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Developer Tools Section -->
+        <TextView
+            android:id="@+id/labelDevTools"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Developer Tools"
+            android:textColor="@color/slate500"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="#FFF1F2"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#1A000000">
+            
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="API Endpoint Override"
+                    android:textColor="#E11D48"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginTop="8dp"/>
+
+                <EditText
+                    android:id="@+id/editApiEndpoint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="http://192.168.1.7:8080"
+                    android:background="@null"
+                    android:padding="12dp"
+                    android:textColor="#E11D48"
+                    android:textSize="14sp"
+                    android:inputType="textUri"/>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#20E11D48" android:layout_marginHorizontal="12dp"/>
+                
+                <Button
+                    android:id="@+id/btnTestConnection"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Test Server Connection"
+                    android:textColor="#E11D48"
+                    android:gravity="start|center_vertical"
+                    android:textAllCaps="false"/>
+
+                <Button
+                    android:id="@+id/btnRefreshHazards"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Refresh Hazard Zones"
+                    android:textColor="#E11D48"
+                    android:gravity="start|center_vertical"
+                    android:textAllCaps="false"/>
+
+                <Button
+                    android:id="@+id/btnClearCache"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Clear Cached Crime Data"
+                    android:textColor="#E11D48"
+                    android:gravity="start|center_vertical"
+                    android:textAllCaps="false"/>
+
+                <Button
+                    android:id="@+id/btnSimulateSos"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Simulate SOS Trigger"
+                    android:textColor="#E11D48"
+                    android:gravity="start|center_vertical"
+                    android:textAllCaps="false"/>
+                
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Verbose Logging"
+                        android:textColor="#E11D48"
+                        android:textSize="14sp"/>
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchLogging"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Version Info -->
+        <TextView
+            android:id="@+id/txtVersion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SafePath v1.0.4-beta\nAPI: http://192.168.1.16:8080"
+            android:textColor="@color/slate400"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="40dp"/>
+
+    </LinearLayout>
+</ScrollView>

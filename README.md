@@ -100,15 +100,15 @@ python3 backend/server.py
 Then open:
 
 ```text
-http://localhost:8787
+http://localhost:8080
 ```
 
 The dashboard requires HTTP Basic auth (`admin` / `admin` by default — change `ADMIN_USER` / `ADMIN_PASS` in `.env`). When `DEMO_MODE=true` (the default), `/api/sos` records the event and the dashboard sees it, but no real SMS is sent — flip it to `false` for a live drill. Set `SOS_FANOUT_NUMBERS` to a comma-separated list to fan out to police/family beyond the user's saved contact.
 
-The Android app talks to `http://10.0.2.2:8787` by default, which is the Android emulator's route back to the host machine. For a physical phone, build with your laptop's LAN IP:
+The Android app talks to `http://10.0.2.2:8080` by default, which is the Android emulator's route back to the host machine. For a physical phone, build with your laptop's LAN IP:
 
 ```bash
-./gradlew assembleDebug -PSAFEPATH_API_URL=http://192.168.x.x:8787
+./gradlew assembleDebug -PSAFEPATH_API_URL=http://192.168.x.x:8080
 ```
 
 Backend capabilities included for the demo:

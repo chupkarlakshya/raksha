@@ -16,7 +16,7 @@ android {
 
         val mapsKey = (project.findProperty("MAPS_API_KEY") as String?) ?: "AIzaSyA03tc8_xkPHr9r9ow4K2xlMbHrzl3R5w8"
         manifestPlaceholders["MAPS_API_KEY"] = mapsKey
-        val safePathApiUrl = (project.findProperty("SAFEPATH_API_URL") as String?) ?: "http://10.0.2.2:8787"
+        val safePathApiUrl = (project.findProperty("SAFEPATH_API_URL") as String?) ?: "http://192.168.1.8:8080"
         buildConfigField("String", "SAFEPATH_API_URL", "\"$safePathApiUrl\"")
     }
 

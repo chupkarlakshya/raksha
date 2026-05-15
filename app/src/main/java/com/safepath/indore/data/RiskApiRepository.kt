@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.google.android.gms.maps.model.LatLng
 import com.safepath.indore.BuildConfig
+import com.safepath.indore.SafePathApp
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -18,11 +19,22 @@ data class RiskCell(val location: LatLng, val score: Double)
 
 /** Pulls grid risk predictions from the backend ML model (`/api/risk-grid`). */
 object RiskApiRepository {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private fun api(path: String): String =
-        BuildConfig.SAFEPATH_API_URL.trimEnd('/') + path
+    private fun api(path: String): String {
+        val prefs = SafePathApp.context.getSharedPreferences("safepath_prefs", android.content.Context.MODE_PRIVATE)
+        val override = prefs.getString("api_endpoint", null)
+        val baseUrl = if (!override.isNullOrBlank()) {
+            if (override.startsWith("http")) override else "http://$override"
+        } else {
+            BuildConfig.SAFEPATH_API_URL
+        }
+        return baseUrl.removeSuffix("/") + path
+    }
 
     fun fetchGrid(
         minLat: Double,
@@ -43,6 +55,8 @@ object RiskApiRepository {
         val url = api("/api/risk-grid") +
             "?minLat=$minLat&maxLat=$maxLat&minLng=$minLng&maxLng=$maxLng" +
             "&steps=$steps&hour=$h&day=$pyDay"
+        
+        android.util.Log.d("RiskApiRepository", "Fetching grid from: $url")
         val request = Request.Builder().url(url).get().build()
 
         client.newCall(request).enqueue(object : Callback {

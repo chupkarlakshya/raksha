@@ -2,6 +2,7 @@ package com.safepath.indore.routing
 
 import com.google.android.gms.maps.model.LatLng
 import com.safepath.indore.data.RiskCalculator
+import com.safepath.indore.data.HazardZone
 import com.safepath.indore.utils.GeoUtils
 
 /**
@@ -28,7 +29,7 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
 
     private val numWaypoints = 11           // total points incl. endpoints (matches the 10–15 cap for Maps URL)
 
-    fun generate(origin: LatLng, destination: LatLng, stickToMainRoads: Boolean): List<Route> {
+    fun generate(origin: LatLng, destination: LatLng, stickToMainRoads: Boolean, hazards: List<HazardZone> = emptyList()): List<Route> {
         val baseline = straightLine(origin, destination, numWaypoints)
         val directDist = GeoUtils.distanceMeters(origin, destination)
 
@@ -37,9 +38,19 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
         val dynamicBalanced = listOf(-maxOff * 0.6, -maxOff * 0.3, 0.0, maxOff * 0.3, maxOff * 0.6)
         val dynamicSafest   = listOf(-maxOff, -maxOff * 0.6, -maxOff * 0.3, 0.0, maxOff * 0.3, maxOff * 0.6, maxOff)
 
-        val fastest  = scoreRoute(RouteType.FASTEST, baseline, stickToMainRoads, origin, destination)
-        val balanced = optimise(RouteType.BALANCED, origin, destination, dynamicBalanced, stickToMainRoads)
-        val safest   = optimise(RouteType.SAFEST, origin, destination, dynamicSafest, stickToMainRoads)
+        // FASTEST: Snaps to main roads to look like a real Google Maps suggestion
+        val fastestPts = ArrayList<LatLng>(numWaypoints)
+        fastestPts += origin
+        for (i in 1 until numWaypoints - 1) {
+            val t = i.toDouble() / (numWaypoints - 1)
+            val baselinePoint = GeoUtils.interpolate(origin, destination, t)
+            fastestPts += RoadNetwork.nearestMainRoadPoint(baselinePoint)
+        }
+        fastestPts += destination
+        val fastest = scoreRoute(RouteType.FASTEST, fastestPts, stickToMainRoads, origin, destination, hazards)
+
+        val balanced = optimise(RouteType.BALANCED, origin, destination, dynamicBalanced, stickToMainRoads, hazards)
+        val safest   = optimise(RouteType.SAFEST, origin, destination, dynamicSafest, stickToMainRoads, hazards)
 
         return listOf(fastest, balanced, safest)
     }
@@ -63,7 +74,8 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
         type: RouteType,
         a: LatLng, b: LatLng,
         offsets: List<Double>,
-        stickToMainRoads: Boolean
+        stickToMainRoads: Boolean,
+        hazards: List<HazardZone>
     ): Route {
         val pts = ArrayList<LatLng>(numWaypoints)
         pts += a
@@ -100,7 +112,7 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
             val best = candidates.minBy { c ->
                 val d = GeoUtils.distanceMeters(prev, c)
                 val distFromBaseline = GeoUtils.distanceMeters(baseline, c)
-                val risk = riskCalc.riskAt(c)
+                val risk = riskCalc.riskAt(c, hazards = hazards)
                 val penalty = roadPenaltyAt(c, t, stickToMainRoads)
 
                 // PROGRESS CHECK: Don't go backwards
@@ -111,20 +123,29 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
                 } else 0.0
 
                 // COST FUNCTION
-                // We increase the distance weight for SAFEST to penalize massive detours more.
-                // We also add a small penalty for distance from baseline to keep the route "tight".
-                val distWeight = if (type == RouteType.SAFEST) 3.0 else 2.0
-                val baselineWeight = 1.0 // Increased to keep it tighter
-                val riskWeight = if (type == RouteType.SAFEST) 12.0 else 6.0
-                val penWeight  = if (type == RouteType.SAFEST) 10.0 else 5.0
-                
-                (d * distWeight) + (distFromBaseline * baselineWeight) + 
-                (risk * riskWeight * 40) + (penalty * penWeight * 40) + movingAwayPenalty
+                val distWeight = when(type) {
+                    RouteType.FASTEST -> 1.0
+                    RouteType.BALANCED -> 2.0
+                    RouteType.SAFEST -> 3.0
+                }
+                val riskWeight = when(type) {
+                    RouteType.FASTEST -> 2.0   // Enormous hazard risk (1000) * 2 still detours
+                    RouteType.BALANCED -> 10.0
+                    RouteType.SAFEST -> 25.0
+                }
+                val penWeight = when(type) {
+                    RouteType.FASTEST -> 0.0
+                    RouteType.BALANCED -> 6.0
+                    RouteType.SAFEST -> 12.0
+                }
+
+                (d * distWeight) + (distFromBaseline * 0.5) + 
+                (risk * riskWeight * 40.0) + (penalty * penWeight * 40.0) + movingAwayPenalty
             }
             pts += best
         }
         pts += b
-        return scoreRoute(type, pts, stickToMainRoads, a, b)
+        return scoreRoute(type, pts, stickToMainRoads, a, b, hazards)
     }
 
     /**
@@ -150,12 +171,13 @@ class RouteGenerator(private val riskCalc: RiskCalculator) {
         type: RouteType,
         points: List<LatLng>,
         stickToMainRoads: Boolean,
-        origin: LatLng, destination: LatLng
+        origin: LatLng, destination: LatLng,
+        hazards: List<HazardZone> = emptyList()
     ): Route {
         val dist = GeoUtils.polylineLengthMeters(points)
-
+        
         // Risk along the route (sample every 100 m).
-        val risk = riskCalc.routeRisk(points, sampleEveryMeters = 100.0)
+        val risk = riskCalc.routeRisk(points, hazards = hazards, sampleEveryMeters = 100.0)
 
         // Average road penalty per sample, also at 100 m.
         val samples = GeoUtils.samplePolyline(points, 100.0)

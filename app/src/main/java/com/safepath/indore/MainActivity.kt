@@ -2,19 +2,22 @@ package com.safepath.indore
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.location.Geocoder as AndroidGeocoder
 import android.net.Uri
-import android.os.Bundle
-import android.os.CountDownTimer
+import android.os.*
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.Toast
-import android.widget.EditText
+import android.widget.*
 import android.widget.LinearLayout as LayoutWidget
-import android.widget.SeekBar
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -22,48 +25,26 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import android.os.Vibrator
-import android.os.VibrationEffect
-import android.os.Build
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.Circle
-import com.google.android.gms.maps.model.CircleOptions
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.maps.model.Marker
-import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.Polyline
-import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.gms.maps.model.*
+import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Wearable
 import com.google.maps.android.heatmaps.Gradient
 import com.google.maps.android.heatmaps.HeatmapTileProvider
 import com.google.maps.android.heatmaps.WeightedLatLng
-import com.safepath.indore.data.CrimeDataLoader
-import com.safepath.indore.data.IncidentReport
-import com.safepath.indore.data.IncidentRepository
-import com.safepath.indore.data.IncidentType
-import com.safepath.indore.data.RiskApiRepository
-import com.safepath.indore.data.RiskCalculator
-import com.safepath.indore.data.RiskCell
+import com.safepath.indore.R
+import com.safepath.indore.data.*
 import com.safepath.indore.databinding.ActivityMainBinding
 import com.safepath.indore.routing.Route
 import com.safepath.indore.routing.RouteGenerator
 import com.safepath.indore.routing.RouteType
-import com.safepath.indore.ui.EmergencyGuideActivity
-import com.safepath.indore.ui.FakeCallActivity
-import com.safepath.indore.ui.LiveTrackActivity
-import com.safepath.indore.ui.SosActivity
+import com.safepath.indore.ui.*
+import com.safepath.indore.utils.*
 import com.safepath.indore.utils.Geocoder
-import com.safepath.indore.utils.VoiceCoach
-import com.google.android.gms.wearable.Wearable
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-import com.google.android.gms.wearable.MessageClient
-import com.google.android.gms.wearable.MessageEvent
+import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListener {
 
@@ -85,6 +66,10 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private val aiRiskCircles = mutableListOf<Circle>()
     private var heatmapOverlay: com.google.android.gms.maps.model.TileOverlay? = null
     private var unsafeCircle: Circle? = null
+    private var hazardCircles = mutableListOf<Circle>()
+    private var activeHazards = listOf<HazardZone>()
+    private var hazardRefreshJob: Job? = null
+    private val waypointMarkers = mutableMapOf<RouteType, MutableList<Circle>>()
 
     private var routes: List<Route> = emptyList()
     private var selected: RouteType = RouteType.SAFEST
@@ -128,13 +113,19 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             riskCalc = RiskCalculator(crimes)
             routeGen = RouteGenerator(riskCalc)
             refreshCommunityIncidents()
+            startHazardRefresh()
         }
 
         setupMap()
-        setupTopBar()
         setupBottomPanel()
         setupSosButton()
+        setupLocationInput()
         checkWatchConnection()
+        
+        // Demo specific: set greeting name
+        binding.userName.text = "Aanya"
+        
+        Toast.makeText(this, "SafePath Connect: ${com.safepath.indore.BuildConfig.SAFEPATH_API_URL}", Toast.LENGTH_LONG).show()
     }
 
     // ----------------------------------------------------- Watch status ----
@@ -168,48 +159,63 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private fun checkWatchConnection() {
         Wearable.getNodeClient(this).connectedNodes
             .addOnSuccessListener { nodes ->
-                val chip = binding.root.findViewById<TextView>(R.id.watchStatusChip)
-                    ?: return@addOnSuccessListener
+                // In the new layout, we don't have a specific watchStatusChip
+                // We'll update the 'Shield Active' pill text instead if it exists
                 if (nodes.isNotEmpty()) {
-                    chip.text = "Watch Connected"
-                    chip.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
+                    val nodeName = nodes[0].displayName
+                    binding.tvWatchStatusHome.text = "Watch: $nodeName"
+                    binding.tvWatchStatusHome.setTextColor(getColor(R.color.accent))
+                    binding.watchStatusDot.setBackgroundResource(R.drawable.circle_green)
                 } else {
-                    chip.text = "Watch Disconnected"
-                    chip.setTextColor(android.graphics.Color.parseColor("#F44336"))
+                    binding.tvWatchStatusHome.text = "No watch paired"
+                    binding.tvWatchStatusHome.setTextColor(getColor(R.color.slate400))
+                    binding.watchStatusDot.setBackgroundResource(R.drawable.circle_slate)
                 }
             }
             .addOnFailureListener {
-                val chip = binding.root.findViewById<TextView>(R.id.watchStatusChip)
-                chip?.text = "Watch Disconnected"
-                chip?.setTextColor(android.graphics.Color.parseColor("#F44336"))
+                binding.tvWatchStatusHome.text = "Watch Error"
             }
     }
 
     // ---------------------------------------------------------------- Map ---
 
     private fun setupMap() {
-        val frag = supportFragmentManager.findFragmentById(R.id.mapFragment) as SupportMapFragment
+        val frag = supportFragmentManager.findFragmentById(R.id.mainMapView) as SupportMapFragment
         frag.getMapAsync { map ->
             googleMap = map
-            map.uiSettings.isZoomControlsEnabled = false
-            map.uiSettings.isMyLocationButtonEnabled = true
-            map.uiSettings.isCompassEnabled = true
+            map.uiSettings.setZoomControlsEnabled(false)
+            map.uiSettings.setMyLocationButtonEnabled(true)
+            map.uiSettings.setCompassEnabled(true)
 
-            map.setOnPolylineClickListener { line ->
+            map.setOnPolylineClickListener { line: Polyline ->
                 val type = line.tag as? RouteType ?: return@setOnPolylineClickListener
                 selectRoute(type)
             }
 
-            map.setOnMapClickListener { latLng ->
+            map.setOnMapClickListener { latLng: LatLng ->
                 if (isPickingIncidentLocation) {
                     isPickingIncidentLocation = false
                     startIncidentTypeSelection(latLng)
                 }
             }
 
-            map.setOnMapLongClickListener { latLng ->
+            map.setOnMapLongClickListener { latLng: LatLng ->
                 setDestinationAt(latLng, "Dropped Pin")
             }
+
+            map.setOnInfoWindowClickListener { marker ->
+                if (policeMarkers.contains(marker)) {
+                    val uri = "google.navigation:q=${marker.position.latitude},${marker.position.longitude}"
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                    intent.setPackage("com.google.android.apps.maps")
+                    try { startActivity(intent) } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, "Google Maps not found", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            // FAB for reporting incidents — always visible on map
+            binding.fabReport.setOnClickListener { showReportIncidentDialog() }
 
             // Center on Indore.
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(origin, 13f))
@@ -217,7 +223,17 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             updateUnsafeWarning()
             
             refreshCommunityIncidents()
+            loadSettings()
         }
+    }
+
+    private fun loadSettings() {
+        val prefs = getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE)
+        val pVis = prefs.getBoolean("police_visible", false)
+        val hVis = prefs.getBoolean("heatmap_visible", false)
+        
+        if (pVis) togglePoliceStations()
+        if (hVis) toggleHeatmap()
     }
 
     private fun requestLocation() {
@@ -243,57 +259,315 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                     origin = LatLng(loc.latitude, loc.longitude)
                     map.animateCamera(CameraUpdateFactory.newLatLngZoom(origin, 14f))
                     updateUnsafeWarning()
+                    
+                    // Update origin label text
+                    val addr = Geocoder.reverseGeocode(this@MainActivity, origin) ?: "Current Location"
+                    binding.originLabel.text = addr
                 }
             }
         } catch (_: SecurityException) { /* permission revoked mid-flight */ }
     }
 
-    // ---------------------------------------------------------------- UI ----
+    private fun startHazardRefresh() {
+        hazardRefreshJob?.cancel()
+        hazardRefreshJob = lifecycleScope.launch {
+            while (isActive) {
+                val newHazards = HazardZoneFetcher.fetchActiveZones()
+                if (newHazards != activeHazards) {
+                    activeHazards = newHazards
+                    withContext(Dispatchers.Main) {
+                        drawHazardZones(activeHazards)
+                        updateUnsafeWarning()
+                        updateRoutes(activeHazards)
+                    }
+                }
+                delay(120_000) // 2 minutes
+            }
+        }
+    }
 
-    private fun setupTopBar() {
-        binding.destinationInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                onDestinationEntered(binding.destinationInput.text.toString())
+    private fun updateRoutes(hazards: List<HazardZone>) {
+        destination?.let { regenerateRoutes(it) }
+    }
+
+    private fun drawHazardZones(zones: List<HazardZone>) {
+        val map = googleMap ?: return
+        hazardCircles.forEach { it.remove() }
+        hazardCircles.clear()
+        for (zone in zones) {
+            val circle = map.addCircle(
+                CircleOptions()
+                    .center(LatLng(zone.lat, zone.lng))
+                    .radius(zone.radiusM.toDouble())
+                    .fillColor(Color.argb(70, 255, 0, 0))
+                    .strokeColor(Color.RED)
+                    .strokeWidth(2f)
+            )
+            hazardCircles.add(circle)
+        }
+    }
+
+    // ---------------------------------------------------------------- UI ----
+    private fun setupBottomPanel() {
+        // Navigation Bar Listeners
+        binding.navHome.setOnClickListener {
+            showHomeState()
+        }
+        binding.navRoute.setOnClickListener {
+            showRouteState()
+        }
+        binding.navReport.setOnClickListener {
+            showReportIncidentDialog()
+        }
+        binding.navSettings.setOnClickListener {
+            showSettingsState()
+        }
+
+        binding.chipPoliceStations.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked != policeVisible) togglePoliceStations()
+        }
+
+        binding.chipHeatmap.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked != heatmapVisible) toggleHeatmap()
+        }
+
+        // Secondary features from the Grid
+        binding.btnFakeCall.setOnClickListener {
+            startActivity(android.content.Intent(this, com.safepath.indore.ui.FakeCallActivity::class.java))
+        }
+        binding.btnTimer.setOnClickListener {
+            showTimerDialog()
+        }
+        binding.btnLiveTrack.setOnClickListener {
+            startActivity(android.content.Intent(this, com.safepath.indore.ui.LiveTrackActivity::class.java))
+        }
+        binding.btnSafeRoute.setOnClickListener {
+            showRouteState()
+        }
+
+        binding.btnBackToHome.setOnClickListener {
+            showHomeState()
+        }
+
+        binding.btnRouteSafest.setOnClickListener { selectRoute(RouteType.SAFEST) }
+        binding.btnRouteFastest.setOnClickListener { selectRoute(RouteType.FASTEST) }
+
+        binding.navigateButton.setOnClickListener { launchGoogleMapsNavigation() }
+
+        // Make location card interactive (Disambiguation Search)
+        binding.originLabel.setOnClickListener { showSearchDialog(isOrigin = true) }
+        binding.destLabel.setOnClickListener { showSearchDialog(isOrigin = false) }
+
+        binding.btnRefreshHazards.setOnClickListener {
+            lifecycleScope.launch {
+                val newHazards = HazardZoneFetcher.fetchActiveZones()
+                activeHazards = newHazards
+                drawHazardZones(activeHazards)
+                updateUnsafeWarning()
+                updateRoutes(activeHazards)
+                Toast.makeText(this@MainActivity, "Hazards refreshed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showSearchDialog(isOrigin: Boolean) {
+        val input = android.widget.EditText(this)
+        input.hint = if (isOrigin) "Starting point..." else "Destination..."
+        input.setSingleLine()
+        input.setPadding(60, 40, 60, 40)
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+            .setTitle(if (isOrigin) "Update Start" else "Update Destination")
+            .setView(input)
+            .setPositiveButton("Search") { _, _ ->
+                val query = input.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    val matches = Geocoder.getPossibleMatches(this, query)
+                    if (matches.isEmpty()) {
+                        Toast.makeText(this, "No matches found for '$query'", Toast.LENGTH_SHORT).show()
+                    } else if (matches.size == 1) {
+                        if (isOrigin) {
+                            origin = matches[0].second
+                            binding.originLabel.text = matches[0].first
+                            destination?.let { regenerateRoutes(it) }
+                        } else {
+                            setDestinationAt(matches[0].second, matches[0].first)
+                        }
+                    } else {
+                        val names = matches.map { it.first }.toTypedArray()
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("Which one did you mean?")
+                            .setItems(names) { _, which ->
+                                val selectedMatch = matches[which]
+                                if (isOrigin) {
+                                    origin = selectedMatch.second
+                                    binding.originLabel.text = selectedMatch.first
+                                    destination?.let { regenerateRoutes(it) }
+                                } else {
+                                    setDestinationAt(selectedMatch.second, selectedMatch.first)
+                                }
+                            }.show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun setupLocationInput() {
+        // Live Suggestions Logic
+        binding.destinationInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString()?.trim() ?: ""
+                if (query.length >= 2) {
+                    // 1. Get Local Landmarks
+                    val localMatches = Geocoder.getPossibleMatches(this@MainActivity, query)
+                    
+                    // 2. Get Google Suggestions
+                    Geocoder.getGoogleSuggestions(query) { googleResults ->
+                        runOnUiThread {
+                            // Merge results (Local first)
+                            val merged = mutableListOf<Pair<String, String>>()
+                            localMatches.forEach { merged.add(it.first to "LOCAL:${it.second.latitude},${it.second.longitude}") }
+                            googleResults.forEach { merged.add(it.first to it.second) }
+                            
+                            if (merged.isNotEmpty()) {
+                                showSuggestions(merged)
+                            } else {
+                                binding.searchSuggestionsCard.visibility = android.view.View.GONE
+                            }
+                        }
+                    }
+                } else {
+                    binding.searchSuggestionsCard.visibility = android.view.View.GONE
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.destinationInput.setOnEditorActionListener { v, actionId, event ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || 
+                (event != null && event.keyCode == android.view.KeyEvent.KEYCODE_ENTER && event.action == android.view.KeyEvent.ACTION_DOWN)) {
+                onDestinationEntered(v.text.toString())
+                binding.searchSuggestionsCard.visibility = android.view.View.GONE
                 true
             } else false
         }
     }
 
-    private fun setupBottomPanel() {
-        binding.btnSafeRoute.setOnClickListener {
-            val q = binding.destinationInput.text.toString()
-            if (q.isBlank()) {
-                Toast.makeText(this, "Enter a destination first (e.g. Vijay Nagar).", Toast.LENGTH_SHORT).show()
-                binding.destinationInput.requestFocus()
-            } else onDestinationEntered(q)
+    private fun showSuggestions(matches: List<Pair<String, String>>) {
+        binding.searchSuggestionsCard.visibility = android.view.View.VISIBLE
+        binding.searchSuggestions.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        binding.searchSuggestions.adapter = SuggestionAdapter(matches) { name, id ->
+            binding.searchSuggestionsCard.visibility = android.view.View.GONE
+            binding.destinationInput.setText(name)
+            
+            if (id.startsWith("LOCAL:")) {
+                val coords = id.removePrefix("LOCAL:").split(",")
+                val pos = LatLng(coords[0].toDouble(), coords[1].toDouble())
+                setDestinationAt(pos, name)
+            } else {
+                // Fetch coordinates from Google Place ID
+                Toast.makeText(this, "Locating $name…", Toast.LENGTH_SHORT).show()
+                Geocoder.getPlaceDetails(id) { pos ->
+                    runOnUiThread {
+                        if (pos != null) {
+                            setDestinationAt(pos, name)
+                        } else {
+                            Toast.makeText(this, "Could not find coordinates for $name", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            
+            // Hide keyboard
+            val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.hideSoftInputFromWindow(binding.destinationInput.windowToken, 0)
         }
+    }
 
-        binding.btnHeatmap.setOnClickListener { toggleHeatmap() }
-        binding.btnPoliceStations.setOnClickListener { togglePoliceStations() }
-        binding.btnAiRisk.setOnClickListener { toggleAiRisk() }
-        binding.btnVoice.setOnClickListener { toggleVoice() }
-        binding.btnFakeCall.setOnClickListener {
-            startActivity(Intent(this, FakeCallActivity::class.java))
+    // --- Suggestion Adapter ---
+    inner class SuggestionAdapter(
+        private val items: List<Pair<String, String>>,
+        private val onClick: (String, String) -> Unit
+    ) : androidx.recyclerview.widget.RecyclerView.Adapter<SuggestionAdapter.VH>() {
+        inner class VH(view: android.view.View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
+            val text: android.widget.TextView = view.findViewById(R.id.suggestionText)
         }
-        binding.btnLiveTrack.setOnClickListener {
-            startActivity(Intent(this, LiveTrackActivity::class.java))
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
+            val v = android.view.LayoutInflater.from(parent.context).inflate(R.layout.item_suggestion, parent, false)
+            return VH(v)
         }
-        binding.btnContacts.setOnClickListener { showContactDialog() }
-        binding.btnTimer.setOnClickListener { showTimerDialog() }
-        binding.btnReportIncident.setOnClickListener { showReportIncidentDialog() }
-        binding.btnGuide.setOnClickListener {
-            startActivity(Intent(this, EmergencyGuideActivity::class.java))
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val (name, pos) = items[position]
+            holder.text.text = name
+            holder.itemView.setOnClickListener { onClick(name, pos) }
         }
+        override fun getItemCount() = items.size
+    }
 
-        binding.routeChipFastest.setOnClickListener  { selectRoute(RouteType.FASTEST) }
-        binding.routeChipBalanced.setOnClickListener { selectRoute(RouteType.BALANCED) }
-        binding.routeChipSafest.setOnClickListener   { selectRoute(RouteType.SAFEST) }
 
-        binding.mainRoadSwitch.setOnCheckedChangeListener { _, _ ->
-            destination?.let { regenerateRoutes(it) }
+    private fun showHomeState() {
+        binding.homeScroll.visibility = View.VISIBLE
+        binding.mapContainer.visibility = View.GONE
+        binding.routeSummary.visibility = View.GONE
+        binding.btnBackToHome.visibility = View.GONE
+        binding.fragmentContainer.visibility = View.GONE
+        
+        // Highlight Home Tab
+        updateNavState(binding.navHome)
+    }
+
+    private fun showRouteState() {
+        binding.homeScroll.visibility = View.GONE
+        binding.mapContainer.visibility = View.VISIBLE
+        binding.btnBackToHome.visibility = View.VISIBLE
+        binding.fragmentContainer.visibility = View.GONE
+        if (destination != null) {
+            binding.routeSummary.visibility = View.VISIBLE
         }
+        // Highlight Route Tab
+        updateNavState(binding.navRoute)
+    }
 
-        binding.navigateButton.setOnClickListener { launchGoogleMapsNavigation() }
+    private fun updateNavState(active: View) {
+        val colorActive = ContextCompat.getColor(this, R.color.accent)
+        val colorInactive = ContextCompat.getColor(this, R.color.slate400)
+
+        // Reset all
+        binding.navHomeIcon.setColorFilter(colorInactive)
+        binding.navHomeText.setTextColor(colorInactive)
+        binding.navRouteIcon.setColorFilter(colorInactive)
+        binding.navRouteText.setTextColor(colorInactive)
+        binding.navReportIcon.setColorFilter(colorInactive)
+        binding.navReportText.setTextColor(colorInactive)
+        binding.navSettingsIcon.setColorFilter(colorInactive)
+        binding.navSettingsText.setTextColor(colorInactive)
+
+        // Set active
+        when(active.id) {
+            binding.navHome.id -> {
+                binding.navHomeIcon.setColorFilter(colorActive)
+                binding.navHomeText.setTextColor(colorActive)
+                binding.navHomeText.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            binding.navRoute.id -> {
+                binding.navRouteIcon.setColorFilter(colorActive)
+                binding.navRouteText.setTextColor(colorActive)
+                binding.navRouteText.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            binding.navReport.id -> {
+                binding.navReportIcon.setColorFilter(colorActive)
+                binding.navReportText.setTextColor(colorActive)
+                binding.navReportText.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            binding.navSettings.id -> {
+                binding.navSettingsIcon.setColorFilter(colorActive)
+                binding.navSettingsText.setTextColor(colorActive)
+                binding.navSettingsText.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+        }
     }
 
     // ---------------------------------------------------------- SOS hold ----
@@ -348,48 +622,94 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
 
     private fun onDestinationEntered(rawQuery: String) {
         if (!::routeGen.isInitialized) {
-            Toast.makeText(this, "Loading crime data… try again in a sec.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Wait, still loading local data...", Toast.LENGTH_SHORT).show()
             return
         }
-        val coord = Geocoder.geocode(this, rawQuery)
-        if (coord == null) {
-            Toast.makeText(
-                this,
-                "Unknown place. Try long-pressing on the map or type: Rajwada, Vijay Nagar, Palasia.",
-                Toast.LENGTH_LONG
-            ).show()
-            return
+        val query = rawQuery.trim()
+        if (query.isEmpty()) return
+
+        // Get all possible matches
+        val matches = Geocoder.getPossibleMatches(this, query)
+        
+        if (matches.isEmpty()) {
+            Toast.makeText(this, "No matches found for '$query'", Toast.LENGTH_SHORT).show()
+        } else if (matches.size == 1) {
+            val match = matches[0]
+            setDestinationAt(match.second, match.first)
+        } else {
+            // Show disambiguation dialog
+            val names = matches.map { it.first }.toTypedArray()
+            androidx.appcompat.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+                .setTitle("Which one did you mean?")
+                .setItems(names, object : DialogInterface.OnClickListener {
+                    override fun onClick(dialog: DialogInterface?, which: Int) {
+                        val match = matches[which]
+                        setDestinationAt(match.second, match.first)
+                    }
+                })
+                .show()
         }
-        setDestinationAt(coord, rawQuery)
     }
 
     private fun setDestinationAt(latLng: LatLng, label: String) {
         destination = latLng
         binding.destinationInput.setText(label)
+        binding.destLabel.text = label
+        
+        // Update origin label if needed
+        if (binding.originLabel.text == "Indore Junction") {
+            binding.originLabel.text = "Current Location"
+        }
+        
+        showRouteState()
         regenerateRoutes(latLng)
-        Toast.makeText(this, "Destination set: $label", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Finding safest path to $label…", Toast.LENGTH_SHORT).show()
     }
 
     private fun regenerateRoutes(dest: LatLng) {
         val map = googleMap ?: return
-        val stick = binding.mainRoadSwitch.isChecked
-        routes = routeGen.generate(origin, dest, stick)
+        val stick = true // Always stick to main roads for safety
+        routes = routeGen.generate(origin, dest, stick, activeHazards)
 
         clearRoutes()
         for (r in routes) {
             val color = when (r.type) {
-                RouteType.FASTEST -> ContextCompat.getColor(this, R.color.route_fastest)
-                RouteType.BALANCED -> ContextCompat.getColor(this, R.color.route_balanced)
-                RouteType.SAFEST -> ContextCompat.getColor(this, R.color.route_safest)
+                RouteType.FASTEST -> Color.BLUE
+                RouteType.BALANCED -> Color.YELLOW
+                RouteType.SAFEST -> Color.GREEN
             }
-            val width = if (r.type == selected) 18f else 10f
-            val poly = map.addPolyline(PolylineOptions()
+            
+            // Widths: 6dp, 8dp, 10dp
+            val density = resources.displayMetrics.density
+            val width = when (r.type) {
+                RouteType.FASTEST -> 6f * density
+                RouteType.BALANCED -> 8f * density
+                RouteType.SAFEST -> 10f * density
+            }
+
+            val polyOptions = PolylineOptions()
                 .addAll(r.points)
                 .color(color)
                 .width(width)
-                .clickable(true))
+                .clickable(true)
+                .jointType(com.google.android.gms.maps.model.JointType.ROUND)
+            
+            val poly = map.addPolyline(polyOptions)
             poly.tag = r.type
             routePolylines[r.type] = poly
+
+            // Waypoint dots
+            val dots = mutableListOf<Circle>()
+            for (p in r.points) {
+                val circle = map.addCircle(CircleOptions()
+                    .center(p)
+                    .radius(4.0) // 4 meters radius for visibility
+                    .fillColor(color)
+                    .strokeWidth(0f)
+                    .zIndex(5f))
+                dots.add(circle)
+            }
+            waypointMarkers[r.type] = dots
         }
 
         // Markers
@@ -402,13 +722,24 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
         val bounds = LatLngBounds.Builder().include(origin).include(dest).build()
         map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 200))
 
-        // Update bottom UI
-        binding.routeFastestStats.text  = routes.first { it.type == RouteType.FASTEST }.shortLabel()
-        binding.routeBalancedStats.text = routes.first { it.type == RouteType.BALANCED }.shortLabel()
-        binding.routeSafestStats.text   = routes.first { it.type == RouteType.SAFEST }.shortLabel()
-        binding.routeSummary.visibility = View.VISIBLE
-        binding.mainRoadToggleRow.visibility = View.VISIBLE
-        binding.navigateButton.visibility = View.VISIBLE
+        // Update bottom UI stats
+        routes.find { it.type == RouteType.SAFEST }?.let { r ->
+            val norm = if (r.distanceMeters > 0) (r.risk / (r.distanceMeters / 1000.0)) else 0.0
+            val score = (100 - norm).coerceIn(0.0, 100.0)
+            binding.routeSafestScore.text = "%.0f".format(score)
+            binding.routeSafestStats.text = "via ${r.shortLabel().substringAfter("km · ")}"
+            binding.routeSafestTime.text = "${(r.distanceMeters / 400).toInt()}m"
+        }
+        routes.find { it.type == RouteType.FASTEST }?.let { r ->
+            val norm = if (r.distanceMeters > 0) (r.risk / (r.distanceMeters / 1000.0)) else 0.0
+            val score = (100 - norm).coerceIn(0.0, 100.0)
+            binding.routeFastestScore.text = "%.0f".format(score)
+            binding.routeFastestStats.text = "via ${r.shortLabel().substringAfter("km · ")}"
+            binding.routeFastestTime.text = "${(r.distanceMeters / 600).toInt()}m"
+        }
+        
+        // Transition to Route view
+        showRouteState()
 
         selectRoute(selected)
         updateUnsafeWarning()
@@ -430,6 +761,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private fun clearRoutes() {
         routePolylines.values.forEach { it.remove() }
         routePolylines.clear()
+        waypointMarkers.values.forEach { list -> list.forEach { it.remove() } }
+        waypointMarkers.clear()
         markers.forEach { it.remove() }
         markers.clear()
     }
@@ -437,12 +770,31 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private fun selectRoute(type: RouteType) {
         selected = type
         for ((t, line) in routePolylines) {
-            line.width = if (t == type) 18f else 10f
-            line.zIndex = if (t == type) 2f else 1f
+            val isSelected = (t == type)
+            
+            // Highlight opaque/front, dim others (alpha 0.4)
+            val baseColor = when (t) {
+                RouteType.FASTEST -> Color.BLUE
+                RouteType.BALANCED -> Color.YELLOW
+                RouteType.SAFEST -> Color.GREEN
+            }
+            line.color = if (isSelected) baseColor else Color.argb(102, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
+            line.zIndex = if (isSelected) 10f else 1f
+            
+            // Show only selected route's waypoint markers
+            waypointMarkers[t]?.forEach { it.isVisible = isSelected }
         }
-        binding.routeChipFastest.isSelected  = type == RouteType.FASTEST
-        binding.routeChipBalanced.isSelected = type == RouteType.BALANCED
-        binding.routeChipSafest.isSelected   = type == RouteType.SAFEST
+
+        // Update list selection UI (Mockup High-fidelity)
+        val selectedGreen = Color.parseColor("#F0FFF4")
+        val transparent = Color.TRANSPARENT
+        val white = Color.WHITE
+
+        binding.btnRouteSafest.setCardBackgroundColor(if (type == RouteType.SAFEST) selectedGreen else white)
+        binding.btnRouteSafest.strokeWidth = if (type == RouteType.SAFEST) (2 * resources.displayMetrics.density).toInt() else 0
+        
+        binding.btnRouteFastest.setCardBackgroundColor(if (type == RouteType.FASTEST) Color.parseColor("#F8FAFC") else white)
+        binding.btnRouteFastest.strokeWidth = if (type == RouteType.FASTEST) (2 * resources.displayMetrics.density).toInt() else 0
     }
 
     // ------------------------------------------------- Heatmap toggle -------
@@ -457,6 +809,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             heatmapOverlay?.remove()
             heatmapOverlay = null
             heatmapVisible = false
+            binding.chipHeatmap.isChecked = false
+            getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE).edit().putBoolean("heatmap_visible", false).apply()
             return
         }
         val weighted = riskCalc.allWeightedPoints().map { (latLng, w) ->
@@ -482,6 +836,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             com.google.android.gms.maps.model.TileOverlayOptions().tileProvider(provider)
         )
         heatmapVisible = true
+        binding.chipHeatmap.isChecked = true
+        getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE).edit().putBoolean("heatmap_visible", true).apply()
     }
 
     // ----------------------------------------------- AI risk grid overlay --
@@ -492,7 +848,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             aiRiskCircles.forEach { it.remove() }
             aiRiskCircles.clear()
             aiRiskVisible = false
-            binding.btnAiRisk.isSelected = false
+            // binding.btnAiRisk.isSelected = false
             voice.speak("AI risk overlay off")
             return
         }
@@ -520,7 +876,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             }
             renderAiRiskCells(cells)
             aiRiskVisible = true
-            binding.btnAiRisk.isSelected = true
+            // binding.btnAiRisk.isSelected = true
             val hot = cells.count { it.score >= 30 }
             voice.speak(
                 "A I risk overlay on. ${cells.size} cells analyzed, $hot high risk."
@@ -571,8 +927,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
 
     private fun toggleVoice() {
         voice.enabled = !voice.enabled
-        binding.btnVoiceLabel.text = if (voice.enabled) "Voice On" else "Voice Off"
-        binding.btnVoice.isSelected = voice.enabled
+        // binding.btnVoiceLabel.text = if (voice.enabled) "Voice On" else "Voice Off"
+        // binding.btnVoice.isSelected = voice.enabled
         if (voice.enabled) {
             voice.speak("Voice prompts enabled.")
         }
@@ -584,22 +940,98 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             policeMarkers.forEach { it.remove() }
             policeMarkers.clear()
             policeVisible = false
-            binding.btnPoliceStations.isSelected = false
+            binding.chipPoliceStations.isChecked = false
+            getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE).edit().putBoolean("police_visible", false).apply()
             return
         }
 
-        for ((name, pos) in policeStations) {
+        // Use the new PoliceStationProvider
+        for (station in com.safepath.indore.data.PoliceStationProvider.stations) {
             val marker = map.addMarker(MarkerOptions()
-                .position(pos)
-                .title(name)
-                .snippet("Ready to Dispatch")
+                .position(station.location)
+                .title(station.name)
+                .snippet("Emergency: 100")
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
             )
             marker?.let { policeMarkers.add(it) }
         }
         policeVisible = true
-        binding.btnPoliceStations.isSelected = true
-        Toast.makeText(this, "Police Stations Highlighted", Toast.LENGTH_SHORT).show()
+        binding.chipPoliceStations.isChecked = true
+        getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE).edit().putBoolean("police_visible", true).apply()
+        Toast.makeText(this, "Police Stations Visible", Toast.LENGTH_SHORT).show()
+    }
+
+    // ------------------------------------------------- Report Incident -----
+
+    private fun showReportIncidentDialog() {
+        // Ensure map is visible
+        if (binding.mapContainer.visibility != View.VISIBLE) {
+            showRouteState()
+        }
+
+        val lat = origin.latitude
+        val lng = origin.longitude
+
+        val descInput = android.widget.EditText(this)
+        descInput.hint = "What happened? (optional)"
+        descInput.setSingleLine(false)
+        descInput.minLines = 2
+        descInput.setPadding(60, 30, 60, 30)
+
+        val locText = "📍 %.5f, %.5f".format(lat, lng)
+
+        AlertDialog.Builder(this)
+            .setTitle("⚠ Report Incident")
+            .setMessage("Your current location: $locText\n\nThis will be sent to the safety dashboard for review.")
+            .setView(descInput)
+            .setPositiveButton("Submit Report") { _, _ ->
+                val desc = descInput.text.toString().trim().ifEmpty { "No description provided" }
+                submitIncidentReport(lat, lng, desc)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun submitIncidentReport(lat: Double, lng: Double, description: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val body = org.json.JSONObject().apply {
+                    put("latitude", lat)
+                    put("longitude", lng)
+                    put("type", "UNSAFE_SPOT")
+                    put("description", description)
+                    put("reportedBy", "app_user")
+                    put("severity", 3)
+                }.toString()
+
+                val url = java.net.URL("${com.safepath.indore.BuildConfig.SAFEPATH_API_URL}/api/incidents")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(body.toByteArray()) }
+                val ok = conn.responseCode in 200..299
+                conn.disconnect()
+
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        Toast.makeText(this@MainActivity, "✅ Incident reported! Admins will review it.", Toast.LENGTH_LONG).show()
+                        // Refresh hazards to see if it affects routing
+                        lifecycleScope.launch {
+                            val newHazards = HazardZoneFetcher.fetchActiveZones()
+                            activeHazards = newHazards
+                            drawHazardZones(newHazards)
+                        }
+                    } else {
+                        Toast.makeText(this@MainActivity, "Report saved locally. Will sync when connected.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "⚠ Report queued (offline). Will sync later.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     // -------------------------------------------------- Unsafe warning ------
@@ -608,15 +1040,15 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
         if (!::riskCalc.isInitialized) return
         val map = googleMap ?: return
         val wasHigh = unsafeCircle != null
-        val high = riskCalc.isHighRisk(origin)
-        binding.warningChip.visibility = if (high) View.VISIBLE else View.GONE
+        val high = riskCalc.isHighRisk(origin, activeHazards)
+        // binding.warningChip.visibility = if (high) View.VISIBLE else View.GONE
         unsafeCircle?.remove()
         unsafeCircle = null
         if (high) {
             unsafeCircle = map.addCircle(CircleOptions()
                 .center(origin)
                 .radius(250.0)
-                .strokeColor(ContextCompat.getColor(this, R.color.risk_high))
+                .strokeColor(ContextCompat.getColor(this, R.color.accent))
                 .strokeWidth(4f)
                 .fillColor(0x33E53935))
             if (!wasHigh && ::voice.isInitialized) {
@@ -649,7 +1081,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             }
         }
 
-        val waypointParam = sampled.joinToString("|") { "%.6f,%.6f".format(it.latitude, it.longitude) }
+        val waypointParam = if (selected == RouteType.FASTEST) "" else sampled.joinToString("|") { "%.6f,%.6f".format(it.latitude, it.longitude) }
         val builder = Uri.parse("https://www.google.com/maps/dir/").buildUpon()
             .appendQueryParameter("api", "1")
             .appendQueryParameter("origin", "%.6f,%.6f".format(start.latitude, start.longitude))
@@ -671,9 +1103,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     }
 
     private fun showContactDialog() {
-        val prefs = getSharedPreferences("SafePath", MODE_PRIVATE)
+        val prefs = getSharedPreferences("safepath_prefs", MODE_PRIVATE)
         val current = prefs.getString("emergency_contact", "")
-        val demoNums = arrayOf("+917000127676", "+918889800445")
 
         val input = EditText(this).apply {
             hint = "Enter phone number"
@@ -690,14 +1121,9 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                 prefs.edit().putString("emergency_contact", input.text.toString()).apply()
                 Toast.makeText(this, "Contact saved!", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("Demo Numbers") { _, _ ->
-                AlertDialog.Builder(this)
-                    .setTitle("Select Demo Contact")
-                    .setItems(demoNums) { _, i ->
-                        prefs.edit().putString("emergency_contact", demoNums[i]).apply()
-                        Toast.makeText(this, "Demo ${i+1} saved!", Toast.LENGTH_SHORT).show()
-                    }
-                    .show()
+            .setNeutralButton("Clear") { _, _ ->
+                prefs.edit().remove("emergency_contact").apply()
+                Toast.makeText(this, "Contact cleared", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -707,7 +1133,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
         if (safetyTimer != null) {
             safetyTimer?.cancel()
             safetyTimer = null
-            binding.statusChip.findViewById<android.widget.TextView>(android.R.id.text1)?.text = "🛡 Shield Secured"
+            // binding.statusChip.findViewById<android.widget.TextView>(android.R.id.text1)?.text = "🛡 Shield Secured"
             Toast.makeText(this, "Safety timer cancelled.", Toast.LENGTH_SHORT).show()
             return
         }
@@ -731,8 +1157,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                 val sec = (millisUntilFinished / 1000) % 60
                 val min = (millisUntilFinished / (1000 * 60)) % 60
                 // Update status chip or title to show timer
-                binding.statusChip.findViewById<android.widget.TextView>(android.R.id.text1)?.text = 
-                    "⏱ %02d:%02d".format(min, sec)
+                // binding.statusChip.findViewById<android.widget.TextView>(android.R.id.text1)?.text = 
+                //    "⏱ %02d:%02d".format(min, sec)
             }
 
             override fun onFinish() {
@@ -741,23 +1167,6 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             }
         }.start()
         Toast.makeText(this, "Safety timer started for $mins mins.", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun showReportIncidentDialog() {
-        val options = arrayOf("My Current Location", "Select Location on Map")
-        
-        AlertDialog.Builder(this)
-            .setTitle("Report Safety Incident")
-            .setItems(options) { _, which ->
-                if (which == 0) {
-                    startIncidentTypeSelection(origin)
-                } else {
-                    isPickingIncidentLocation = true
-                    Toast.makeText(this, "Tap on the map where the incident occurred", Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     private fun startIncidentTypeSelection(location: LatLng) {
@@ -821,8 +1230,10 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                         Toast.makeText(this, "Report sent for admin verification.", Toast.LENGTH_LONG).show()
                         addIncidentMarkerToMap(report)
                     } else {
-                        val apiUrl = com.safepath.indore.BuildConfig.SAFEPATH_API_URL
-                        Toast.makeText(this, "Could not reach $apiUrl. Check your Wi-Fi and Laptop Firewall.", Toast.LENGTH_LONG).show()
+                        val prefs = getSharedPreferences("safepath_prefs", Context.MODE_PRIVATE)
+                        val override = prefs.getString("api_endpoint", null)
+                        val activeIp = override ?: com.safepath.indore.BuildConfig.SAFEPATH_API_URL
+                        Toast.makeText(this, "Could not reach $activeIp. Check your Wi-Fi and Laptop Firewall.", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -860,5 +1271,27 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
             destination?.let { regenerateRoutes(it) }
             updateUnsafeWarning()
         }
+    }
+
+    private fun showSettingsState() {
+        // Reset Nav UI
+        binding.navHomeIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.slate400))
+        binding.navHomeText.setTextColor(getColor(R.color.slate400))
+        binding.navRouteIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.slate400))
+        binding.navRouteText.setTextColor(getColor(R.color.slate400))
+        binding.navReportIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.slate400))
+        binding.navReportText.setTextColor(getColor(R.color.slate400))
+        binding.navSettingsIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.accent))
+        binding.navSettingsText.setTextColor(getColor(R.color.accent))
+
+        // Toggle visibility
+        binding.homeScroll.visibility = View.GONE
+        binding.routeSummary.visibility = View.GONE
+        binding.fragmentContainer.visibility = View.VISIBLE
+        binding.mapContainer.visibility = View.GONE
+
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, SettingsFragment())
+            .commit()
     }
 }

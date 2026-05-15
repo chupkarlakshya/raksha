@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --primary: #059669;
+  --danger: #ef4444;
+  --text: #1e293b;
+  --text-light: #64748b;
+  --border: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Header */
+.response-header {
+  height: 80px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+h1 { font-size: 20px; margin: 4px 0 0; }
+
+.header-right { display: flex; align-items: center; gap: 24px; }
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.back-link { text-decoration: none; color: var(--text-light); font-size: 13px; }
+
+/* Main Grid */
+.response-main {
+  height: calc(100vh - 80px);
+  padding: 32px 40px;
+}
+
+.main-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 32px;
+  height: 100%;
+}
+
+.focus-section, .responders-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Focus Card */
+.map-view {
+  height: 300px;
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--border);
+}
+
+.sos-content { padding: 32px; }
+
+.badges { display: flex; gap: 8px; margin-bottom: 16px; }
+
+.badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.badge-emergency { background: #fee2e2; color: #b91c1c; }
+.badge-source { background: #e0f2fe; color: #0369a1; }
+
+.coords { font-family: monospace; color: var(--text-light); margin: 8px 0 24px; }
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.label { display: block; font-size: 11px; color: var(--text-light); text-transform: uppercase; margin-bottom: 4px; }
+.value { font-size: 18px; font-weight: 600; }
+
+.action-bar { display: flex; gap: 16px; }
+
+.btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-success { background: var(--primary); color: white; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-danger { background: var(--danger); color: white; }
+
+.btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+/* Responders */
+.section-header {
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-header h2 { font-size: 18px; margin: 0; }
+
+.responder-list { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+.responder-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.item-info strong { display: block; font-size: 15px; }
+.item-info span { font-size: 13px; color: var(--text-light); }
+
+.btn-sm {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-sm:hover { background: var(--primary); color: white; }
+
+/* Empty State */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state p { color: var(--text-light); }

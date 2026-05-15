@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.google.android.gms.maps.model.LatLng
 import com.safepath.indore.BuildConfig
+import com.safepath.indore.SafePathApp
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -39,11 +40,23 @@ import java.io.IOException
  *    In the future, a trust-score system could be added for users.
  */
 object IncidentRepository {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private fun api(path: String): String = BuildConfig.SAFEPATH_API_URL.trimEnd('/') + path
+    private fun api(path: String): String {
+        val prefs = com.safepath.indore.SafePathApp.context.getSharedPreferences("safepath_prefs", android.content.Context.MODE_PRIVATE)
+        val override = prefs.getString("api_endpoint", null)
+        val baseUrl = if (!override.isNullOrBlank()) {
+            if (override.startsWith("http")) override else "http://$override"
+        } else {
+            BuildConfig.SAFEPATH_API_URL
+        }
+        return baseUrl.removeSuffix("/") + path
+    }
 
     private fun postToMain(block: () -> Unit) {
         mainHandler.post(block)
@@ -96,7 +109,10 @@ object IncidentRepository {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 android.util.Log.e("IncidentRepository", "GET Failure: ${e.message}", e)
-                postToMain { callback(emptyList()) }
+                postToMain { 
+                    android.widget.Toast.makeText(com.safepath.indore.SafePathApp.context, "Backend unreachable: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    callback(emptyList()) 
+                }
             }
             override fun onResponse(call: Call, response: Response) {
                 val reports = response.use { res ->
@@ -124,15 +140,21 @@ object IncidentRepository {
             .toString()
             .toRequestBody(jsonMediaType)
 
+        val url = api("/api/sos")
+        android.util.Log.d("IncidentRepository", "Submitting SOS to: $url")
+
         val request = Request.Builder()
-            .url(api("/api/sos"))
+            .url(url)
             .post(body)
             .build()
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                android.util.Log.e("IncidentRepository", "POST Failure: ${e.message}", e)
-                postToMain { onComplete(false) }
+                android.util.Log.e("IncidentRepository", "Network Failure: ${e.message}", e)
+                postToMain { 
+                    android.widget.Toast.makeText(com.safepath.indore.SafePathApp.context, "Server Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    onComplete(false) 
+                }
             }
             override fun onResponse(call: Call, response: Response) {
                 val success = response.isSuccessful
