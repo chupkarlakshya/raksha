@@ -422,7 +422,12 @@ class SafePathHandler(http.server.BaseHTTPRequestHandler):
     def require_admin(self):
         if self.is_admin():
             return True
-        self.send_json(401, {"error": "unauthorized"})
+        # Send 401 with WWW-Authenticate to trigger browser login prompt
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="SafePath Admin"')
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": "unauthorized"}).encode())
         return False
 
     def handle_one_request(self):

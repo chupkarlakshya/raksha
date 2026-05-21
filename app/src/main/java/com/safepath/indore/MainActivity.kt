@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private lateinit var riskCalc: RiskCalculator
     private lateinit var routeGen: RouteGenerator
     private lateinit var fusedClient: FusedLocationProviderClient
+    private val geofenceManager by lazy { GeofenceManager(this) }
 
     private var googleMap: GoogleMap? = null
 
@@ -69,6 +70,7 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private var hazardCircles = mutableListOf<Circle>()
     private var activeHazards = listOf<HazardZone>()
     private var hazardRefreshJob: Job? = null
+    private var currentlyInsideHazardId: Int? = null
     private val waypointMarkers = mutableMapOf<RouteType, MutableList<Circle>>()
 
     private var routes: List<Route> = emptyList()
@@ -96,7 +98,12 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private val locationPermissionRequest = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
-        if (granted.values.any { it }) enableMyLocationLayer()
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true || granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
+            enableMyLocationLayer()
+        }
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            geofenceManager.updateGeofences(activeHazards)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -239,13 +246,32 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
     private fun requestLocation() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
-            locationPermissionRequest.launch(arrayOf(
+        val bg = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+        val notif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+
+        if (fine != PackageManager.PERMISSION_GRANTED || bg != PackageManager.PERMISSION_GRANTED || notif != PackageManager.PERMISSION_GRANTED) {
+            val perms = mutableListOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
-            ))
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                perms.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            locationPermissionRequest.launch(perms.toTypedArray())
         } else {
             enableMyLocationLayer()
+            geofenceManager.updateGeofences(activeHazards)
         }
     }
 
@@ -278,7 +304,15 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                     withContext(Dispatchers.Main) {
                         drawHazardZones(activeHazards)
                         updateUnsafeWarning()
+                        geofenceManager.updateGeofences(activeHazards)
+                        checkCurrentLocationForHazards(activeHazards)
                         updateRoutes(activeHazards)
+                    }
+                } else if (activeHazards.isNotEmpty()) {
+                    // Update geofences once even if hazards haven't changed, in case permissions were just granted
+                    withContext(Dispatchers.Main) {
+                        geofenceManager.updateGeofences(activeHazards)
+                        checkCurrentLocationForHazards(activeHazards)
                     }
                 }
                 delay(120_000) // 2 minutes
@@ -288,6 +322,37 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
 
     private fun updateRoutes(hazards: List<HazardZone>) {
         destination?.let { regenerateRoutes(it) }
+    }
+
+    private fun checkCurrentLocationForHazards(hazards: List<HazardZone>) {
+        if (!::fusedClient.isInitialized) return
+        val currentLoc = origin
+        var insideZone: HazardZone? = null
+
+        for (hz in hazards) {
+            val results = FloatArray(1)
+            android.location.Location.distanceBetween(
+                currentLoc.latitude, currentLoc.longitude,
+                hz.lat, hz.lng,
+                results
+            )
+            if (results[0] <= hz.radiusM) {
+                insideZone = hz
+                break
+            }
+        }
+
+        if (insideZone != null) {
+            if (currentlyInsideHazardId != insideZone.id) {
+                currentlyInsideHazardId = insideZone.id
+                // Trigger alert manually!
+                val intent = Intent(this, com.safepath.indore.receivers.GeofenceAlertReceiver::class.java)
+                intent.action = "com.safepath.indore.ACTION_MANUAL_GEOFENCE_TRIGGER"
+                sendBroadcast(intent)
+            }
+        } else {
+            currentlyInsideHazardId = null
+        }
     }
 
     private fun drawHazardZones(zones: List<HazardZone>) {
@@ -364,6 +429,8 @@ class MainActivity : AppCompatActivity(), MessageClient.OnMessageReceivedListene
                 activeHazards = newHazards
                 drawHazardZones(activeHazards)
                 updateUnsafeWarning()
+                geofenceManager.updateGeofences(activeHazards)
+                checkCurrentLocationForHazards(activeHazards)
                 updateRoutes(activeHazards)
                 Toast.makeText(this@MainActivity, "Hazards refreshed", Toast.LENGTH_SHORT).show()
             }

@@ -15,7 +15,7 @@ import java.io.InputStreamReader
 object CrimeDataLoader {
 
     private const val TAG = "CrimeDataLoader"
-    private const val ASSET_NAME = "crime_data.csv"
+    private val ASSET_NAMES = listOf("crime_data.csv", "bhopal.csv")
 
     @Volatile
     private var cache: List<CrimePoint>? = null
@@ -31,46 +31,48 @@ object CrimeDataLoader {
     }
 
     private fun parse(context: Context): List<CrimePoint> {
-        val results = ArrayList<CrimePoint>(2200)
-        try {
-            context.assets.open(ASSET_NAME).use { stream ->
-                BufferedReader(InputStreamReader(stream)).use { reader ->
-                    val header = reader.readLine() ?: return emptyList()
-                    val cols = header.split(",").map { it.trim() }
-                    val idxTs = cols.indexOf("timestamp")
-                    val idxAct379 = cols.indexOf("act379")
-                    val idxAct323 = cols.indexOf("act323")
-                    val idxAct363 = cols.indexOf("act363")
-                    val idxAct302 = cols.indexOf("act302")
-                    val idxLat = cols.indexOf("latitude")
-                    val idxLng = cols.indexOf("longitude")
+        val results = ArrayList<CrimePoint>(4000)
+        for (assetName in ASSET_NAMES) {
+            try {
+                context.assets.open(assetName).use { stream ->
+                    BufferedReader(InputStreamReader(stream)).use { reader ->
+                        val header = reader.readLine() ?: return@use
+                        val cols = header.split(",").map { it.trim() }
+                        val idxTs = cols.indexOf("timestamp")
+                        val idxAct379 = cols.indexOf("act379")
+                        val idxAct323 = cols.indexOf("act323")
+                        val idxAct363 = cols.indexOf("act363")
+                        val idxAct302 = cols.indexOf("act302")
+                        val idxLat = if (cols.indexOf("latitude") >= 0) cols.indexOf("latitude") else cols.indexOf("lat")
+                        val idxLng = if (cols.indexOf("longitude") >= 0) cols.indexOf("longitude") else cols.indexOf("lng")
 
-                    var line = reader.readLine()
-                    while (line != null) {
-                        val parts = line.split(",")
-                        if (parts.size >= cols.size) {
-                            val lat = parts[idxLat].toDoubleOrNull()
-                            val lng = parts[idxLng].toDoubleOrNull()
-                            if (lat != null && lng != null) {
-                                val ts = parts[idxTs]
-                                val hour = parseHour(ts)
-                                results += CrimePoint(
-                                    latitude = lat,
-                                    longitude = lng,
-                                    hour = hour,
-                                    act302 = parts[idxAct302].toIntOrNull() ?: 0,
-                                    act363 = parts[idxAct363].toIntOrNull() ?: 0,
-                                    act323 = parts[idxAct323].toIntOrNull() ?: 0,
-                                    act379 = parts[idxAct379].toIntOrNull() ?: 0
-                                )
+                        var line = reader.readLine()
+                        while (line != null) {
+                            val parts = line.split(",")
+                            if (parts.size >= cols.size) {
+                                val lat = if (idxLat >= 0) parts.getOrNull(idxLat)?.toDoubleOrNull() else null
+                                val lng = if (idxLng >= 0) parts.getOrNull(idxLng)?.toDoubleOrNull() else null
+                                if (lat != null && lng != null) {
+                                    val ts = if (idxTs >= 0) parts.getOrNull(idxTs) else null
+                                    val hour = ts?.let { parseHour(it) } ?: 12
+                                    results += CrimePoint(
+                                        latitude = lat,
+                                        longitude = lng,
+                                        hour = hour,
+                                        act302 = if (idxAct302 >= 0) parts.getOrNull(idxAct302)?.toIntOrNull() ?: 0 else 0,
+                                        act363 = if (idxAct363 >= 0) parts.getOrNull(idxAct363)?.toIntOrNull() ?: 0 else 0,
+                                        act323 = if (idxAct323 >= 0) parts.getOrNull(idxAct323)?.toIntOrNull() ?: 0 else 0,
+                                        act379 = if (idxAct379 >= 0) parts.getOrNull(idxAct379)?.toIntOrNull() ?: 0 else 0
+                                    )
+                                }
                             }
+                            line = reader.readLine()
                         }
-                        line = reader.readLine()
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load $assetName", e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load $ASSET_NAME", e)
         }
         Log.i(TAG, "Loaded ${results.size} crime points")
         return results

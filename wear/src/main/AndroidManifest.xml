@@ -24,6 +24,20 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".services.WatchAlertService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/unsafe_area" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".DangerActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
     </application>
 
 </manifest>
